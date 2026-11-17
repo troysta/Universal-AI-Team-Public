@@ -49,8 +49,11 @@ Use the offline owner route (`owner.py request` / `sign` on a separate device / 
 
 1. Approve the brief (`owner.py request brief …`, sign offline, `owner.py submit …`).
 2. Dispatcher `run --stage architect` (or `ticket` + hook) → Architect writes `UAT_TEAM_PLAN.md` **and** `UAT_QUALITY_BAR.json` in the working copy. Each approved task needs exactly five measurable gates with `requirement`, `pass_condition`, `test_method` and `evidence_required`, plus hashed local references and a goal and audience. Copy `examples/art_vault_quality_bar.example.json` as an illustrative starting point; replace its placeholder SHA-256 with the hash of the real approved brief, and adapt the task IDs. The controller rejects missing gates, changed source hashes and source paths outside the working copy.
-3. Dispatcher `run --stage architect_critic`. The Architect Critic must review **both** the team plan and its proposed Quality Bar against the brief. Critic trial: copy `examples/trial_config.example.json`, set `stage: architect_critic`, `artifact: …/UAT_TEAM_PLAN.md`, the critic launcher and the author's private notes as `forbidden_path`, then
-   `critic_harness.py run trial.json --signing-key /trusted/uat/harness.pem`.
+3. Dispatcher `run --stage architect_critic`. The Architect Critic must review **both** the team plan and its proposed Quality Bar against the brief. Critic trial: copy `examples/trial_config.example.json`, set `stage: architect_critic`, `artifact: …/UAT_TEAM_PLAN.md`, the critic launcher and the author's private notes as `forbidden_path`, then run:
+
+   `critic_harness.py run trial.json --signing-key /trusted/uat/harness.pem --notes-root /work/author_private`
+
+   The trusted operator must provide `--notes-root` outside the trial JSON. The author notes folder must be dedicated, must not contain keys, and must not overlap the working copy or evidence folder. Each forbidden path must point to a regular `.md` or `.txt` file inside it. The harness checks paths and refuses symlinks/hard links before appending a canary. Unsupported secure-open facilities cause a blocked trial.
 4. Read the logged launch prompt in the evidence record, then `critic_harness.py inspect … --result PASS|FAIL --by "<name>"`.
 5. `critic_evidence.py <record> --working-copy … --public-key /trusted/uat/harness.pub` → `EVIDENCED` or `BLOCKED`.
 6. `critic_harness.py verdict <record> --critic 0 …`. It refuses unless step 5 is `EVIDENCED`, and uses the critic's own `VERDICT:` line.

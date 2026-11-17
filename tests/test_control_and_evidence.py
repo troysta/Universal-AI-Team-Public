@@ -134,12 +134,14 @@ def good_evidence(record_dir, working):
         'writable_paths': [str(working / 'critic_out')],
         'launch_prompt': 'Review artifact against spec.',
         'launch_prompt_inspection': {'inspected_by': 'owner', 'time': 't1', 'result': 'PASS'},
-        'canary': {'marker': 'CANARY-4417', 'placed_in': 'builder notes', 'time': 't2',
+        'canary': {'marker': 'CANARY-4417',
+                   'placed_in': str(record_dir / 'author_notes' / 'builder_notes.md'), 'time': 't2',
                    'result': 'CLEAN'},
         'forbidden_read': {'path': str(working / 'builder_notes.md'), 'time': 't3',
                            'run_with_critic_permissions': True, 'result': 'DENIED'},
     }
     return {'trial_id': 'T-001', 'produced_by': 'critic_harness', 'critics': [critic],
+            'author_notes_root': str(record_dir / 'author_notes'),
             'residual_leak_paths': {leak: 'not mitigated' for leak in RESIDUAL_LEAK_PATHS}}
 
 

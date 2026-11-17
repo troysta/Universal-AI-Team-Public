@@ -84,7 +84,9 @@ Evidence must come from the harness, not from values written into a file. `contr
 4. Marks the canary `LEAKED` if it appears in the critic's output.
 5. Writes a read-only evidence record outside the working copy, signed with the **harness** private key. The harness key is separate from the owner's approval key.
 
-Trial and critic-role identifiers are validated as safe filename components; the harness refuses output paths that escape the evidence directory or overwrite existing evidence files. The `forbidden_path` must be a real, nonsymlink private-notes file outside the working copy and evidence directory, distinct from the harness signing key. Trial configurations still belong to the trusted operator; these checks do not make an arbitrary untrusted configuration safe to execute.
+Trial and critic-role identifiers are validated as safe filename components; the harness refuses output paths that escape the evidence directory or overwrite existing evidence files. A separate trusted `--notes-root` CLI argument pins the exact dedicated author-notes directory, **not** a path from trial JSON. The `forbidden_path` must be an existing `.md`/`.txt` file inside that root, separate from the working copy, evidence and signing keys. Symlinks and hard links are rejected; the harness opens each path component without following links before appending the canary. Operating systems without supported directory-fd/no-follow file operations are `BLOCKED`. The signed evidence includes the approved notes root so another reviewer can compare it with the canary path.
+
+The trial JSON and executable critic command still require trusted operator review. A protected notes root constrains the canary write; it does **not** make arbitrary untrusted trial commands safe to execute.
 
 Launch-prompt inspection is a human step. The record starts with inspection `PENDING`; the owner adds `PASS` or `FAIL` with `critic_harness.py inspect`, which refuses to sign a record whose signature no longer matches.
 

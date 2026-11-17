@@ -106,6 +106,7 @@ class GateBase(unittest.TestCase):
                 'writable_paths': [str(self.root / 'critic_out')]}
         path = run_trial(trial_id=f'T-{self.trials}', working_copy=self.work,
                          evidence_dir=self.trusted / 'evidence', signing_key_path=self.harness_private,
+                         author_notes_root=self.private_notes,
                          critics=[spec], residual_leak_paths={k: 'test' for k in RESIDUAL_LEAK_PATHS},
                          timeout=60)
         if inspect:
@@ -627,6 +628,7 @@ class SyntheticArtVaultQualityBarTests(GateBase):
                     'writable_paths': [str(self.root / 'critic_out')]}
             evidence = run_trial(trial_id=f'FRAMING-{attempt}', working_copy=self.work,
                                  evidence_dir=self.trusted / 'evidence', signing_key_path=self.harness_private,
+                                 author_notes_root=self.private_notes,
                                  critics=[spec], residual_leak_paths={k: 'synthetic' for k in RESIDUAL_LEAK_PATHS})
             record_inspection(evidence, self.harness_private, 0, 'PASS', 'Test-only inspector')
             result = record_verdict(self.work, evidence, 0, private_key=self.harness_key, trust=self.trust())

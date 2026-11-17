@@ -44,6 +44,14 @@ Source: selected project-discovery starter files from the protected baseline of 
 - **98 of 98 Python tests pass locally** after these changes, including filename traversal, symlink overwrite protection, signing-key canary protection, failed launches and mixed technical/critic failures. These are offline tests, with a fake agent sandbox.
 - This follow-up is a **separate unmerged candidate** stacked on PR #6; it does not authorise merging either preceding PR, baseline promotion or public release. Live independent agent isolation remains **BLOCKED**.
 
+## Canary root hardening — separate draft candidate (18 November 2026)
+
+- A follow-up security review reproduced a second vulnerability: the trusted harness could append a canary to a **different** private key when a trial's `forbidden_path` named it. The earlier key check protected only the harness's own signing key.
+- New `--notes-root` must come from the **trusted operator's CLI**, not the trial JSON. The harness accepts only existing text notes inside that approved dedicated directory; it rejects roots overlapping the harness signing key, working copy or evidence, as well as symlinks, hard links and disallowed filename types. Secure directory-relative, no-follow opens defend against a parent-symlink replacement between validation and write.
+- Signed evidence includes the approved notes root; evidence assessment checks that each canary file was inside it.
+- **105 of 105 offline Python tests PASS locally**, including a disposable second signing-key protection test, symlink and hard-link tests, a simulated parent-symlink race, rejection of trial-JSON attempts to override the trusted notes root, and previously existing regressions. No real owner credentials or project assets were modified.
+- This branch is **review-only**. The signed harness still requires a trusted trial configuration and the first genuine host-native agent isolation run remains **BLOCKED / not established**. No PR merge, protected-baseline promotion or production claim.
+
 ## Not established by this package
 
 - Fully automatic native-agent dispatch: **UNVERIFIED**.
