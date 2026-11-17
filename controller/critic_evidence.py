@@ -46,7 +46,13 @@ def assess_isolation(record_path, working_copy, public_key_path):
         problems.append(f'cannot check evidence signature: {exc}')
     if record.get('produced_by') != 'critic_harness':
         problems.append('evidence record not produced by critic_harness')
-    problems += _missing(record, ('trial_id', 'critics', 'residual_leak_paths'), '')
+    problems += _missing(record, ('trial_id', 'critics', 'residual_leak_paths', 'author_notes_root'), '')
+    notes_root = record.get('author_notes_root')
+    if notes_root:
+        notes_root = Path(notes_root)
+        if (not notes_root.is_absolute() or _inside(notes_root, working_copy)
+                or _inside(notes_root, record_path.parent)):
+            problems.append('author notes root is not separate from working or evidence')
 
     for index, critic in enumerate(record.get('critics') or []):
         tag = f"critic[{index}] {critic.get('role', '?')}: "
@@ -62,6 +68,8 @@ def assess_isolation(record_path, working_copy, public_key_path):
         problems += _missing(canary, ('marker', 'placed_in', 'time', 'result'), tag + 'canary ')
         if canary and canary.get('result') != 'CLEAN':
             problems.append(tag + 'canary not clean')
+        if notes_root and canary.get('placed_in') and not _inside(canary['placed_in'], notes_root):
+            problems.append(tag + 'canary file not inside approved author notes root')
         read = critic.get('forbidden_read') or {}
         problems += _missing(read, ('path', 'time', 'result'), tag + 'forbidden read ')
         if read and read.get('run_with_critic_permissions') is not True:

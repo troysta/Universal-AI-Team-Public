@@ -1,10 +1,13 @@
 import hashlib
+import contextlib
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import signing
@@ -117,7 +120,8 @@ class HarnessTests(unittest.TestCase):
 
     def trial(self, isolated, trial_id='T-1'):
         return run_trial(trial_id=trial_id, working_copy=self.work, evidence_dir=self.evidence,
-                         signing_key_path=self.private_path, critics=[self.critic(isolated)],
+                         signing_key_path=self.private_path, author_notes_root=self.private,
+                         critics=[self.critic(isolated)],
                          residual_leak_paths=self.leaks, timeout=60)
 
     def test_isolated_trial_needs_inspection_then_is_evidenced(self):
@@ -157,12 +161,14 @@ class HarnessTests(unittest.TestCase):
     def test_harness_refuses_unsafe_setup(self):
         with self.assertRaisesRegex(ValueError, 'outside the working copy'):
             run_trial(trial_id='T', working_copy=self.work, evidence_dir=self.work / 'ev',
-                      signing_key_path=self.private_path, critics=[], residual_leak_paths=self.leaks)
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[], residual_leak_paths=self.leaks)
         partial = dict(self.leaks)
         del partial['network_access']
         with self.assertRaisesRegex(ValueError, 'network_access'):
             run_trial(trial_id='T', working_copy=self.work, evidence_dir=self.evidence,
-                      signing_key_path=self.private_path, critics=[], residual_leak_paths=partial)
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[], residual_leak_paths=partial)
         self.trial(isolated=True)
         with self.assertRaises(FileExistsError):
             self.trial(isolated=True)
@@ -176,7 +182,8 @@ class HarnessTests(unittest.TestCase):
         bad_critic['role'] = '../../control'
         with self.assertRaisesRegex(ValueError, 'safe filename'):
             run_trial(trial_id='T-role', working_copy=self.work, evidence_dir=self.evidence,
-                      signing_key_path=self.private_path, critics=[bad_critic],
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[bad_critic],
                       residual_leak_paths=self.leaks)
 
     def test_preexisting_output_symlink_cannot_overwrite_other_file(self):
@@ -194,9 +201,116 @@ class HarnessTests(unittest.TestCase):
         original = self.private_path.read_bytes()
         with self.assertRaisesRegex(ValueError, 'Canary notes'):
             run_trial(trial_id='T-key', working_copy=self.work, evidence_dir=self.evidence,
-                      signing_key_path=self.private_path, critics=[critic],
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[critic],
                       residual_leak_paths=self.leaks)
         self.assertEqual(self.private_path.read_bytes(), original)
+
+    def test_canary_cannot_modify_a_different_private_key(self):
+        other_private, _ = signing.create_keypair(self.root / 'other_owner.pem',
+                                                   self.root / 'other_owner.pub')
+        before = other_private.read_bytes()
+        critic = self.critic(True)
+        critic['forbidden_path'] = str(other_private)
+        with self.assertRaisesRegex(ValueError, 'approved author notes root'):
+            run_trial(trial_id='T-other-key', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[critic], residual_leak_paths=self.leaks)
+        self.assertEqual(other_private.read_bytes(), before)
+
+    def test_canary_rejects_nontext_file_even_inside_allowed_root(self):
+        other = self.private / 'other_key.pem'
+        other.write_text('do not modify')
+        critic = self.critic(True)
+        critic['forbidden_path'] = str(other)
+        with self.assertRaisesRegex(ValueError, 'visible .md or .txt'):
+            run_trial(trial_id='T-other', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[critic], residual_leak_paths=self.leaks)
+        self.assertEqual(other.read_text(), 'do not modify')
+
+    def test_canary_rejects_symlinked_parent_and_hard_links(self):
+        outside = self.root / 'outside_notes'
+        outside.mkdir()
+        protected_notes = outside / 'builder_notes.md'
+        protected_notes.write_text('do not change')
+        (self.private / 'alias').symlink_to(outside, target_is_directory=True)
+        critic = self.critic(True)
+        critic['forbidden_path'] = str(self.private / 'alias' / 'builder_notes.md')
+        with self.assertRaisesRegex(ValueError, 'approved author notes root'):
+            run_trial(trial_id='T-parent-link', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[critic], residual_leak_paths=self.leaks)
+        hard_link = self.private / 'linked_notes.md'
+        os.link(protected_notes, hard_link)
+        critic['forbidden_path'] = str(hard_link)
+        with self.assertRaisesRegex(ValueError, 'hard-linked'):
+            run_trial(trial_id='T-hard-link', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, author_notes_root=self.private,
+                      critics=[critic], residual_leak_paths=self.leaks)
+        self.assertEqual(protected_notes.read_text(), 'do not change')
+
+    def test_canary_root_cannot_contain_keys_or_working_copy(self):
+        critic = self.critic(True)
+        with self.assertRaisesRegex(ValueError, 'overlaps'):
+            run_trial(trial_id='T-root', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, author_notes_root=self.root,
+                      critics=[critic], residual_leak_paths=self.leaks)
+
+    def test_canary_append_blocks_parent_symlink_swap_after_validation(self):
+        from critic_harness import _validated_notes_file
+        nested = self.private / 'nested'
+        nested.mkdir()
+        (nested / 'builder_notes.md').write_text('permitted')
+        outside = self.root / 'outside'
+        outside.mkdir()
+        target = outside / 'builder_notes.md'
+        target.write_text('sensitive file preserved')
+        critic = self.critic(True)
+        critic['forbidden_path'] = str(nested / 'builder_notes.md')
+        validated = 0
+
+        def swap_after_preflight(value, root):
+            nonlocal validated
+            result = _validated_notes_file(value, root)
+            validated += 1
+            if validated == 2:
+                nested.rename(self.root / 'former_nested')
+                nested.symlink_to(outside, target_is_directory=True)
+            return result
+
+        with patch('critic_harness._validated_notes_file', side_effect=swap_after_preflight):
+            with self.assertRaises(OSError):
+                run_trial(trial_id='T-raced-parent', working_copy=self.work,
+                          evidence_dir=self.evidence, signing_key_path=self.private_path,
+                          author_notes_root=self.private, critics=[critic],
+                          residual_leak_paths=self.leaks)
+        self.assertEqual(target.read_text(), 'sensitive file preserved')
+
+    def test_signed_record_binds_canary_to_the_notes_root(self):
+        path = self.trial(isolated=True)
+        record = json.loads(path.read_text())
+        self.assertEqual(record['author_notes_root'], str(self.private.resolve()))
+        record_inspection(path, self.private_path, 0, 'PASS', 'Project Owner')
+        self.assertEqual(assess_isolation(path, self.work, self.public_path)['isolation'], 'EVIDENCED')
+
+    def test_trial_json_cannot_override_trusted_notes_root_cli_argument(self):
+        from critic_harness import main as harness_main
+        config_path = self.root / 'trial_config.json'
+        config_path.write_text(json.dumps({
+            'trial_id': 'T-root-override', 'working_copy': str(self.work),
+            'evidence_dir': str(self.evidence), 'critics': [self.critic(True)],
+            'residual_leak_paths': self.leaks,
+            'author_notes_root': str(self.root),  # would include signing keys
+        }))
+        original = self.notes.read_text()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as exited:
+            harness_main(['run', str(config_path), '--signing-key', str(self.private_path),
+                          '--notes-root', str(self.private)])
+        self.assertEqual(exited.exception.code, 2)
+        self.assertIn('cannot choose', output.getvalue())
+        self.assertEqual(self.notes.read_text(), original)
 
 
 if __name__ == '__main__':
