@@ -6,9 +6,21 @@ Universal AI Team aims to help a host AI understand a project, prepare an owner-
 
 This public-review package contains the Python project-discovery starter, unit tests, a synthetic offline notes demonstration, and proposed review/safeguard protocols. It deliberately excludes internal trial records, personal handoff records, and protected baseline promotion history.
 
+## Try it on an existing project
+
+See [QUICKSTART.md](QUICKSTART.md) for the two-command, original-preserving setup:
+
+```bash
+python3 install.py --project /path/to/your-project
+python3 install.py --project /path/to/your-project --create
+```
+
+The first command previews; the second creates a separate working copy and control-record folder. It neither installs into the original project nor launches agents. A real host-native trial and independent boundary checks are still required before claiming isolation.
+
 ## Folders
 
 - `controller/` — Python starter; read `controller/START_HERE.md`.
+- `install.py` / `QUICKSTART.md` — safer first-run entry point and concise setup guide.
 - `agents/` — proposed agent roles, not automatic dispatch.
 - `critics/` — independent review requirements.
 - `safeguards/` — approval and baseline rules.

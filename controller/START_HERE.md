@@ -1,5 +1,7 @@
 # Universal AI Team — drop-in starter (test candidate)
 
+**Quick route for a fresh user:** from the repository root run `python3 install.py --project /path/to/project` for a no-write preview, then repeat with `--create`. See [`QUICKSTART.md`](../QUICKSTART.md). The manual copy/rename steps below remain supported for advanced embedding.
+
 Copy this repository's `controller/` folder into a new or existing project and rename the copy to `Universal_AI_Team`. From your project's terminal, run:
 
 1. Preview: `python3 Universal_AI_Team/start.py` (optionally add `--goal "Describe the project task"`)
