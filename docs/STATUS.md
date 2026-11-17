@@ -4,7 +4,8 @@ Source: selected project-discovery starter files from the protected baseline of 
 
 ## Reverified in preparation
 
-- 17 of 17 included Python tests passed using `PYTHONPATH=controller`.
+- 17 of 17 included Python tests passed in the initial release preparation.
+- 18 of 18 Python tests passed in a clean local copy of the public-review repository on 17 November 2026.
 - Source contains an activation/project-discovery starter and a synthetic notes example.
 - Original baseline ZIP was not edited.
 
@@ -18,4 +19,6 @@ Source: selected project-discovery starter files from the protected baseline of 
 
 Next priority: an evidenced end-to-end host-native run with blind critics, controlled tool access, three-submission stop, regression checks and distinct owner approval gates.
 
-**Owner release approval: NOT GRANTED.**
+## Publication boundary
+
+**Public GitHub collaboration was explicitly approved by the owner on 17 November 2026 for this experimental review repository.** This is not approval for production deployment, protected-baseline promotion, or release of private trials and handoff records.
