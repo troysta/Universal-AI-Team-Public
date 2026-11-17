@@ -167,6 +167,37 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.trial(isolated=True)
 
+    def test_trial_id_and_role_cannot_escape_evidence_directory(self):
+        for bad_id in ('../escape', '/tmp/escape', 'T/../../escape', '..\\escape'):
+            with self.subTest(trial_id=bad_id), self.assertRaisesRegex(ValueError, 'safe filename'):
+                self.trial(isolated=True, trial_id=bad_id)
+        self.assertFalse((self.root / 'escape.json').exists())
+        bad_critic = self.critic(True)
+        bad_critic['role'] = '../../control'
+        with self.assertRaisesRegex(ValueError, 'safe filename'):
+            run_trial(trial_id='T-role', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, critics=[bad_critic],
+                      residual_leak_paths=self.leaks)
+
+    def test_preexisting_output_symlink_cannot_overwrite_other_file(self):
+        victim = self.root / 'victim.txt'
+        victim.write_text('preserve these bytes')
+        self.evidence.mkdir()
+        (self.evidence / 'T-symlink_0_specialist_critic_output.txt').symlink_to(victim)
+        with self.assertRaisesRegex(ValueError, 'escapes the evidence folder'):
+            self.trial(isolated=True, trial_id='T-symlink')
+        self.assertEqual(victim.read_text(), 'preserve these bytes')
+
+    def test_canary_rejects_signing_key_as_notes_file(self):
+        critic = self.critic(True)
+        critic['forbidden_path'] = str(self.private_path)
+        original = self.private_path.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'Canary notes'):
+            run_trial(trial_id='T-key', working_copy=self.work, evidence_dir=self.evidence,
+                      signing_key_path=self.private_path, critics=[critic],
+                      residual_leak_paths=self.leaks)
+        self.assertEqual(self.private_path.read_bytes(), original)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -457,6 +457,7 @@ class GateEnforcementTests(GateBase):
         with self.assertRaisesRegex(ValueError, 'one-time'):
             self.approve('release', candidate=self.candidate)
 
+
     def test_changed_candidate_is_not_the_approved_candidate(self):
         self.approved_plan(tasks=('build',))
         self.accept_task('build')
@@ -475,6 +476,51 @@ class GateEnforcementTests(GateBase):
         record_path.write_text(json.dumps(record))
         self.assertBlocked(self.launch('specialist', 'deploy'), 'invalid signature')
         self.assertBlocked(self.launch('architect'), 'invalid signature')
+
+
+class LaunchRecoveryTests(GateBase):
+    def failed_launch(self, stage='architect', task=None):
+        return run_stage(self.work, stage, [sys.executable, '-c', 'import sys; sys.exit(7)'],
+                         trust_config=self.config, launcher=self.sandbox, task_id=task)
+
+    def test_failed_launch_is_not_misreported_as_success_or_left_pending(self):
+        failed = self.failed_launch()
+        self.assertEqual(failed['status'], 'BLOCKED')
+        self.assertEqual(failed['returncode'], 7)
+        self.assertEqual(failed['attempt_recorded']['submission'], 1)
+        self.assertEqual(self.launch('architect')['status'], 'LAUNCHED')
+        self.write_quality_bar()
+        (self.work / PLAN_NAME).write_text('Team v2\n')
+        self.assertEqual(self.launch('architect_critic')['status'], 'LAUNCHED')
+        self.assertEqual(self.review('architect_critic', self.work / PLAN_NAME)['submission'], 2)
+
+    def test_three_failed_starts_stop_and_escalate_without_fake_critic_verdicts(self):
+        for attempt in range(1, 4):
+            failure = self.failed_launch()
+            self.assertEqual(failure['attempt_recorded']['submission'], attempt)
+            self.assertEqual(failure['attempt_recorded']['escalated_to_owner'], attempt == 3)
+        self.assertBlocked(self.launch('architect'), 'escalate to owner')
+        record = json.loads((self.control / RECORD_NAME).read_text())
+        self.assertEqual(record['tasks']['__architect__']['launch_failures'], [1, 2, 3])
+        self.assertEqual(record.get('verdicts') or [], [])
+        self.assertEqual(record['tasks']['__architect__']['state'], 'ESCALATED_TO_OWNER')
+
+    def test_failed_reviewer_command_does_not_consume_author_attempt(self):
+        self.submit_plan()
+        result = self.failed_launch('architect_critic')
+        self.assertEqual(result['status'], 'BLOCKED')
+        self.assertIsNone(result['attempt_recorded']['submission'])
+        self.assertEqual(self.launch('architect_critic')['status'], 'LAUNCHED')
+        self.assertEqual(self.review('architect_critic', self.work / PLAN_NAME)['submission'], 1)
+
+    def test_technical_and_critic_failures_share_three_attempt_budget(self):
+        self.failed_launch()
+        self.submit_plan('Plan v2\n')
+        self.assertEqual(self.review('architect_critic', self.work / PLAN_NAME, 'FAIL')['submission'], 2)
+        failed = self.failed_launch()
+        self.assertEqual(failed['attempt_recorded']['submission'], 3)
+        self.assertTrue(failed['attempt_recorded']['escalated_to_owner'])
+        self.assertBlocked(self.launch('architect'), 'escalate to owner')
 
 
 class TicketHookTests(GateBase):

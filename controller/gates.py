@@ -179,14 +179,20 @@ def _loop_key(stage, task_id):
 
 
 def _loop_status(record, verdicts, stage, task_id):
-    """Submissions launched, reviews recorded, failures and acceptance for one loop."""
+    """Every author attempt is accounted for by a review or a recorded launch failure.
+
+    Technical launch failures consume one of the three attempts; they are NOT
+    critic verdicts. This avoids a stuck pending submission without making
+    unlimited unsuccessful launches a way around the three-attempt limit.
+    """
     review_stage = AUTHOR_STAGES.get(stage, stage)
     key = _loop_key(stage, task_id)
     loop = [v for v in verdicts if v['stage'] == review_stage
             and (review_stage == 'architect_critic' or v['task_id'] == key)]
+    failed_launches = (record.get('tasks') or {}).get(key, {}).get('launch_failures', [])
     return {'launched': (record.get('tasks') or {}).get(key, {}).get('submissions', 0),
-            'reviewed': len(loop),
-            'fails': sum(v['verdict'] != 'PASS' for v in loop),
+            'reviewed': len(loop) + len(failed_launches),
+            'fails': sum(v['verdict'] != 'PASS' for v in loop) + len(failed_launches),
             'accepted': any(v['verdict'] == 'PASS' for v in loop)}
 
 
@@ -309,6 +315,30 @@ def note_launch(working_copy, control, stage, task_id=None):
     save_record(control, record, 'STAGE_AUTHORIZED', stage=stage, task_id=task_id,
                 submission=submission)
     return submission
+
+
+def note_launch_failure(working_copy, control, stage, task_id=None, *, returncode=None, reason=None):
+    """Record a failed execution, accounting for an author attempt without fake critic review."""
+    working, control, record = _context(working_copy, control)
+    submission = None
+    escalated = False
+    if stage in AUTHOR_STAGES:
+        key = _loop_key(stage, task_id)
+        loop = (record.get('tasks') or {}).get(key)
+        if not loop or not loop.get('submissions'):
+            raise ValueError('Cannot record failure for an unlaunched submission')
+        submission = loop['submissions']
+        failures = loop.setdefault('launch_failures', [])
+        if submission in failures:
+            raise ValueError('Launch failure already recorded for this submission')
+        failures.append(submission)
+        escalated = submission >= MAX_SUBMISSIONS
+        if escalated:
+            loop['state'] = 'ESCALATED_TO_OWNER'
+    save_record(control, record, 'STAGE_LAUNCH_FAILED', stage=stage, task_id=task_id,
+                submission=submission, returncode=returncode, reason=reason,
+                escalated_to_owner=escalated)
+    return {'submission': submission, 'escalated_to_owner': escalated}
 
 
 # ---------------------------------------------------------------- owner approvals
