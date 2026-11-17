@@ -178,6 +178,36 @@ def _loop_key(stage, task_id):
     return ARCHITECT_LOOP if stage in ('architect', 'architect_critic') else task_id
 
 
+def _stall_reason(reviews, review_stage):
+    """Conservative, rubric-driven early stop after two failed review rounds.
+
+    An Architect has no per-gate score, so only an identical rejected plan/bar
+    counts as a stall. A Specialist makes no measurable gate-level progress if
+    the later review passes no gate that the earlier review failed.
+    Mixed gains and regressions count as progress for this guard; the owner can
+    still intervene, and the hard three-attempt limit remains in place.
+    """
+    if len(reviews) < 2:
+        return None
+    before, after = reviews[-2:]
+    if before['verdict'] != 'FAIL' or after['verdict'] != 'FAIL':
+        return None
+    if review_stage == 'architect_critic':
+        if (before['artifact_sha256'] == after['artifact_sha256']
+                and before.get('quality_bar_sha256') == after.get('quality_bar_sha256')):
+            return 'Two rejected Architect rounds submitted the identical plan and Quality Bar'
+        return None
+    if review_stage == 'specialist_critic':
+        old, new = before.get('gate_results'), after.get('gate_results')
+        if not isinstance(old, dict) or not isinstance(new, dict) or set(old) != set(new):
+            return None
+        old_passes = {gate for gate, result in old.items() if result['verdict'] == 'PASS'}
+        new_passes = {gate for gate, result in new.items() if result['verdict'] == 'PASS'}
+        if not (new_passes - old_passes):
+            return 'Two failed Specialist rounds gained no passing Quality Bar gate'
+    return None
+
+
 def _loop_status(record, verdicts, stage, task_id):
     """Every author attempt is accounted for by a review or a recorded launch failure.
 
@@ -193,7 +223,8 @@ def _loop_status(record, verdicts, stage, task_id):
     return {'launched': (record.get('tasks') or {}).get(key, {}).get('submissions', 0),
             'reviewed': len(loop) + len(failed_launches),
             'fails': sum(v['verdict'] != 'PASS' for v in loop) + len(failed_launches),
-            'accepted': any(v['verdict'] == 'PASS' for v in loop)}
+            'accepted': any(v['verdict'] == 'PASS' for v in loop),
+            'stalled_reason': _stall_reason(loop, review_stage)}
 
 
 def _final_pass(verdicts, candidate_sha):
@@ -254,6 +285,8 @@ def authorize(stage, working_copy, trust, control=None, *, task_id=None, candida
         name = 'team plan' if stage == 'architect' else f'task {task_id!r}'
         if status['accepted']:
             raise ValueError(f'The {name} is already accepted')
+        if status['stalled_reason']:
+            raise ValueError(f'{name} stalled: {status["stalled_reason"]}; stopped, escalate to owner')
         if status['fails'] >= MAX_SUBMISSIONS:
             raise ValueError(f'The {name} failed review {MAX_SUBMISSIONS} times: stopped, escalate to owner')
         if ticketed_submission is None:
@@ -500,11 +533,17 @@ def record_verdict(working_copy, evidence_path, critic_index, *, private_key, tr
     entry_out = {'payload': payload, 'signature': signing.attach(payload, private_key)['signature']}
     record.setdefault('verdicts', []).append(entry_out)
     escalated = False
+    stalled_reason = None
     if stage in REVIEW_STAGES and verdict != 'PASS':
-        escalated = _loop_status(record, verdicts + [payload], stage, task_id)['fails'] >= MAX_SUBMISSIONS
+        status = _loop_status(record, verdicts + [payload], stage, task_id)
+        stalled_reason = status['stalled_reason']
+        escalated = bool(stalled_reason) or status['fails'] >= MAX_SUBMISSIONS
         if escalated:
-            record['tasks'][_loop_key(stage, task_id)]['state'] = 'ESCALATED_TO_OWNER'
+            record['tasks'][_loop_key(stage, task_id)]['state'] = (
+                'STALLED_OWNER_REVIEW' if stalled_reason else 'ESCALATED_TO_OWNER')
     save_record(control, record, 'CRITIC_VERDICT', stage=stage, task_id=task_id,
-                verdict=verdict, escalated=escalated, evidence=str(evidence_path))
+                verdict=verdict, escalated=escalated, stalled_reason=stalled_reason,
+                evidence=str(evidence_path))
     return {'status': 'RECORDED', 'stage': stage, 'task_id': task_id, 'verdict': verdict,
-            'submission': submission, 'escalated_to_owner': escalated}
+            'submission': submission, 'escalated_to_owner': escalated,
+            'stalled_reason': stalled_reason}

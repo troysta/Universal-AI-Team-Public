@@ -34,7 +34,7 @@ Source: selected project-discovery starter files from the protected baseline of 
 - Architect Critic evidence binds the exact proposed team plan **and** Quality Bar. Owner's `team_plan` signature binds both hashes; the control folder stores an approved copy and stages recheck file and reference-source integrity.
 - Specialist Critic evidence must include `GATE_RESULTS:` with a verdict and supporting evidence for every approved gate. Incomplete or contradictory gate results cannot count as a pass. Final Critic receives the bar and cannot record a review before specialist tasks have accepted reviews.
 - **91 of 91 Python tests pass locally**, including negative tests for changed/missing gates, changed references, missing evidence and a two-round **synthetic** Art Vault framing example (failed mat measurement, focused correction, then pass). The example is deterministic test code, **not a genuine native AI critic or a Samsung device test**.
-- These changes are **proposed on a separate development branch**, not merged into `main` or promoted as a protected baseline. Phase 2 (no-improvement stop) and Phase 3 (optional blind human comparison) remain proposals, not implemented.
+- These changes are **proposed on a separate development branch**, not merged into `main` or promoted as a protected baseline. The no-improvement stop and optional blind human comparison are developed in a **later stacked review candidate**, described below; neither has been merged.
 - Live host-native agents and independently examined isolation evidence are still **BLOCKED / not established**. The prior 80-test baseline and its limitations remain historically true; the 91-test result refers only to this unmerged candidate.
 
 ## Follow-up security review branch — awaiting owner review (18 November 2026)
@@ -51,6 +51,15 @@ Source: selected project-discovery starter files from the protected baseline of 
 - Signed evidence includes the approved notes root; evidence assessment checks that each canary file was inside it.
 - **105 of 105 offline Python tests PASS locally**, including a disposable second signing-key protection test, symlink and hard-link tests, a simulated parent-symlink race, rejection of trial-JSON attempts to override the trusted notes root, and previously existing regressions. No real owner credentials or project assets were modified.
 - This branch is **review-only**. The signed harness still requires a trusted trial configuration and the first genuine host-native agent isolation run remains **BLOCKED / not established**. No PR merge, protected-baseline promotion or production claim.
+
+## Gauntlet improvement candidate — separate draft (18 November 2026)
+
+- After two consecutive `FAIL` reviews, the controller can stop early at `STALLED_OWNER_REVIEW`. For Specialists, this requires a second failed round with **no newly passing Quality Bar gate**. An improvement in a gate permits the third attempt. For Architect plans (which have no gate-level progress score), early stopping requires exactly the same rejected plan and Quality Bar hashes twice. `BLOCKED` reviews are not treated as a failed-improvement pair.
+- This is a deliberately narrow, measurable stall rule. A change may improve the work without changing a gate from FAIL to PASS; the owner can assess that at the stop checkpoint. The existing hard three-submission limit, owner gates and signatures remain unchanged.
+- Optional `controller/blind_compare.py` prepares randomly labelled A/B copies and approved reference documents in a **separate review packet**. A separate private folder holds the mapping until a human score is recorded. The reviewer chooses A/B/TIE, records which gates each passes, then the operator can reveal the labels. Neither candidate nor approved baseline is modified.
+- A/B labels being hidden does **not** establish reviewer identity, independence, an unbiased Quality Bar, or that artifact content itself does not disclose its origin. Human comparison is optional and cannot override approval or release gates.
+- **113 of 113 offline tests passed locally**, exercising early-stop, continued improvement, two possible label assignments, score tampering and reference integrity. No real human blind comparison or genuine host-native trial has been executed. **Isolation remains BLOCKED**.
+- This is a **review-only stacked branch**, not approved to merge, deploy, or promote as a protected baseline.
 
 ## Not established by this package
 
