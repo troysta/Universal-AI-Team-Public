@@ -26,6 +26,8 @@ PYTHONPATH=controller python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 These tests do not prove authenticated owner identity, enforced agent isolation, or automatic native-agent dispatch. See `docs/STATUS.md`.
 
+The separate Quality Bar development candidate adds five explicit acceptance gates per task and signed, gate-by-gate critic evidence. It has an offline synthetic Art Vault framing test; it has **not** completed a real native-agent trial or been promoted to the protected baseline. See `critics/README.md` and `docs/TRIAL_RUNBOOK.md`.
+
 ## Contributing
 
 Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the issues labelled **good first issue**. Pull requests are reviewed by the repository owner.

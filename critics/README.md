@@ -4,6 +4,20 @@ Each Architect and Specialist submission receives a blind review by a separate c
 
 Record verdicts as `PASS`, `FAIL` or `BLOCKED`, with evidence. A missing artifact or unverified independent context must be `BLOCKED`. Allow at most three submissions per task; stop and escalate to the owner after the third failure.
 
+## Mandatory task Quality Bar (development candidate)
+
+Before an Architect review, the Architect must prepare `UAT_QUALITY_BAR.json` alongside `UAT_TEAM_PLAN.md`. Every task listed for owner approval must have **exactly five** named, measurable pass/fail gates, a goal and audience, and at least one local reference source with an exact SHA-256. Each gate states:
+
+- The requirement and specific pass condition.
+- How a reviewer can test it.
+- What evidence the reviewer must provide.
+
+The Architect Critic receives and examines **both** documents; its signed review evidence binds hashes of both. The owner signs the exact plan SHA-256 **and** Quality Bar SHA-256 in a single `team_plan` approval. Later stages refuse a changed Quality Bar, a changed referenced source, or a missing protected copy. The validation enforces structure and integrity, **not whether the rubric is genuinely a good measure of quality** — the Architect Critic and owner must judge that.
+
+The Specialist Critic receives the current artifact and the **approved** Quality Bar, not the builder's notes or prior verdicts. It returns a JSON object on a line beginning `GATE_RESULTS:` with one entry per gate, for example `"G1":{"verdict":"FAIL","evidence":"Screenshot and measured dimensions ..."}`. It also reports `VERDICT: PASS` or `VERDICT: FAIL`. A global PASS is not accepted if any gate is FAIL or BLOCKED. A gate without an outcome/evidence, or an output whose gate IDs differ from the approved bar, **cannot be recorded as a pass**.
+
+The harness captures the actual critic text in signed evidence. These are critic observations, not automatically independently checked facts; objective tests and a separate human/evidence review remain necessary. Five gates are the fixed v1 trial convention, not a universal law for every project. See `docs/TRIAL_RUNBOOK.md` and `examples/art_vault_quality_bar.example.json`.
+
 These are requirements. This repository does not implement or prove the full critic execution system.
 
 ## Critic isolation reporting

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "tasks": {
+    "framing": {
+      "goal": "Prepare a framed working copy without changing the original artwork",
+      "audience": "Artists using a simple catalogue on Samsung Android",
+      "references": [
+        {
+          "path": "UAT_APPROVED_PROJECT_BRIEF.md",
+          "sha256": "REPLACE_WITH_THE_ACTUAL_64_CHARACTER_LOWERCASE_SHA256_OF_THIS_FILE"
+        }
+      ],
+      "gates": [
+        {
+          "id": "G1",
+          "requirement": "Preserve the original artwork",
+          "pass_condition": "Stored original image SHA-256 matches the pre-framing SHA-256",
+          "test_method": "Hash original before and after creating framed copy",
+          "evidence_required": "Both original file hashes"
+        },
+        {
+          "id": "G2",
+          "requirement": "Use the approved default mat",
+          "pass_condition": "Mat width equals 17px when an artwork is first added",
+          "test_method": "Inspect rendered or serialized default mat setting",
+          "evidence_required": "Measured mat width and test device details"
+        },
+        {
+          "id": "G3",
+          "requirement": "Use the approved default frame",
+          "pass_condition": "Frame width equals 10px when an artwork is first added",
+          "test_method": "Inspect rendered or serialized default frame setting",
+          "evidence_required": "Measured frame width and test device details"
+        },
+        {
+          "id": "G4",
+          "requirement": "Display the framed copy in My Gallery",
+          "pass_condition": "Gallery image uses the framed working copy and not the original",
+          "test_method": "Compare Gallery display with saved framed copy",
+          "evidence_required": "Gallery observation or screenshot and image identifiers"
+        },
+        {
+          "id": "G5",
+          "requirement": "Display the framed copy in Promotions",
+          "pass_condition": "Promotion image uses the framed working copy and not the original",
+          "test_method": "Compare Promotions display with saved framed copy",
+          "evidence_required": "Promotions observation or screenshot and image identifiers"
+        }
+      ]
+    }
+  }
+}

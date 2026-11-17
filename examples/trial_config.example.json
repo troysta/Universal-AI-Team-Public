@@ -10,7 +10,7 @@
     "model": "<model name>",
     "launcher": ["sudo", "-u", "uat-critic", "--"],
     "command": ["<headless critic command that reads the prompt on stdin>"],
-    "prompt": "Review /work/myproject_uat_working/src against the approved brief only. End with VERDICT: PASS or VERDICT: FAIL and the evidence.",
+    "prompt": "Review only the artifact and the approved task Quality Bar. For each gate report PASS, FAIL or BLOCKED with supporting evidence in one GATE_RESULTS: JSON line. Then report VERDICT: PASS or VERDICT: FAIL. Do not inspect the author's private notes or previous verdicts.",
     "forbidden_path": "/work/author_private/build_notes.md",
     "permissions": ["read working copy"],
     "readable_paths": ["/work/myproject_uat_working"],
