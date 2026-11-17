@@ -61,6 +61,15 @@ Source: selected project-discovery starter files from the protected baseline of 
 - **113 of 113 offline tests passed locally**, exercising early-stop, continued improvement, two possible label assignments, score tampering and reference integrity. No real human blind comparison or genuine host-native trial has been executed. **Isolation remains BLOCKED**.
 - This is a **review-only stacked branch**, not approved to merge, deploy, or promote as a protected baseline.
 
+## One-command safe setup — separate draft (18 November 2026)
+
+- Root `install.py` exposes a **read-only preview** with `--project`, then explicit `--create` to use the existing inventory, common-secrets exclusions and separate working-copy/control-record preparation. `--doctor` reports local prerequisites without claiming live security or agent capability.
+- `QUICKSTART.md` gives a short path for someone with an existing project, including Windows and ZIP alternatives. No controller folder needs copying or renaming for this introductory workflow.
+- First-run review found and corrected a path/sequence mismatch: the generated AI Host guide now points to the actual trusted `controller/start.py` location and requires approved-brief verification **before** launching an Architect, matching the quick-start instructions.
+- Setup does **not** change the original project, install agents, bypass owner approval, create a real filesystem boundary or run the native-agent trial. Full enforced setup remains in `docs/TRIAL_RUNBOOK.md`.
+- **119 of 119 offline tests passed locally** across the stacked candidate, including new preview/no-write, excluded credentials, no-overwrite and control-folder placement regressions. The security boundary still needs genuine external validation; isolation remains **BLOCKED**.
+- Draft-only, stacked on the Gauntlet review candidate; **no main-branch merge or protected-baseline promotion**.
+
 ## Not established by this package
 
 - Fully automatic native-agent dispatch: **UNVERIFIED**.
