@@ -18,7 +18,7 @@ This public-review package contains the Python project-discovery starter, unit t
 
 ## Run the tests
 
-From the repository root with Python 3:
+From the repository root with Python 3 (signing needs `pip install -r requirements.txt`):
 
 ```bash
 PYTHONPATH=controller python3 -m unittest discover -s tests -p 'test_*.py' -v
