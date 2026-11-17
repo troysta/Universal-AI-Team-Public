@@ -84,6 +84,8 @@ Evidence must come from the harness, not from values written into a file. `contr
 4. Marks the canary `LEAKED` if it appears in the critic's output.
 5. Writes a read-only evidence record outside the working copy, signed with the **harness** private key. The harness key is separate from the owner's approval key.
 
+Trial and critic-role identifiers are validated as safe filename components; the harness refuses output paths that escape the evidence directory or overwrite existing evidence files. The `forbidden_path` must be a real, nonsymlink private-notes file outside the working copy and evidence directory, distinct from the harness signing key. Trial configurations still belong to the trusted operator; these checks do not make an arbitrary untrusted configuration safe to execute.
+
 Launch-prompt inspection is a human step. The record starts with inspection `PENDING`; the owner adds `PASS` or `FAIL` with `critic_harness.py inspect`, which refuses to sign a record whose signature no longer matches.
 
 Critic verdicts reach the dispatcher only through `critic_harness.py verdict <evidence> --critic <n>`. It refuses unless that critic's evidence record assesses as `EVIDENCED`. The verdict is taken from the critic's own last `VERDICT: PASS|FAIL` line in the recorded output (no line = `BLOCKED`), bound to the artifact hash recorded before and after the review; each evidence entry can be used once. The dispatcher counts failed reviews per loop (the Architect's plan and each Specialist task): after the third, that loop is stopped and escalated to the owner.

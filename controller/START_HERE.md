@@ -42,7 +42,11 @@ Needs `pip install cryptography`. Full step-by-step setup and the first genuine 
 
    `python3 Universal_AI_Team/dispatcher.py run --working-copy … --trust-config ~/.uat/trust.json --stage specialist --task build --launcher '["sudo","-u","uat-agent"]' -- <stage command>`
 
+   If a stage process exits unsuccessfully or cannot be started, `run` returns `BLOCKED` and logs `STAGE_LAUNCH_FAILED`. For Architect/Specialist work this consumes **one** of the three allowed attempts, but releases the pending-submission checkpoint so another attempt can start. Three launch failures, or a combination of launch failures and failed critic reviews, stop and escalate to the owner. A technical launch failure is **not** represented as an independent critic verdict.
+
 5. **Critic verdicts come only from evidence.** `critic_harness.py verdict <evidence.json> --critic 0 …` records a verdict only if that critic's isolation evidence assesses as `EVIDENCED`; the verdict is the critic's own `VERDICT:` line, bound to the exact artifact hash it reviewed. For a Specialist Critic the output must also include `GATE_RESULTS:` with pass/fail evidence for all five approved gates. If the bar or its referenced source changed, if a gate lacks evidence, or if gate results contradict PASS, the verdict cannot be recorded. Three failed reviews stop the Architect's plan loop or a Specialist's task and escalate to the owner.
+
+   Evidence trial IDs and critic role IDs must be simple filename components (letters, numbers, underscores and hyphens). The harness rejects path separators and pre-existing output files. Use only a trusted, existing private-notes file for the canary; it cannot be inside the working copy or evidence folder or be the harness signing key.
 
 6. **If the host launches sub-agents itself,** issue a launch ticket on the trusted side for each one, then install the dispatcher as a pre-launch hook:
 

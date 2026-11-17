@@ -37,6 +37,13 @@ Source: selected project-discovery starter files from the protected baseline of 
 - These changes are **proposed on a separate development branch**, not merged into `main` or promoted as a protected baseline. Phase 2 (no-improvement stop) and Phase 3 (optional blind human comparison) remain proposals, not implemented.
 - Live host-native agents and independently examined isolation evidence are still **BLOCKED / not established**. The prior 80-test baseline and its limitations remain historically true; the 91-test result refers only to this unmerged candidate.
 
+## Follow-up security review branch — awaiting owner review (18 November 2026)
+
+- After reviewing draft PR #5 and #6, a local trial confirmed that `trial_id=../escaped_trial` could write a signed evidence record **outside** the configured evidence folder. The harness now validates trial and critic-role filename components, checks evidence output location and uses exclusive creation rather than overwriting an existing file.
+- A separate trial confirmed that a failed stage process was recorded as launched and prevented the next submission. Failed Architect/Specialist starts now log `STAGE_LAUNCH_FAILED`, count as failed attempts (never fabricated critic verdicts), and release the review checkpoint for another attempt. Three attempts still stop and escalate to the owner.
+- **98 of 98 Python tests pass locally** after these changes, including filename traversal, symlink overwrite protection, signing-key canary protection, failed launches and mixed technical/critic failures. These are offline tests, with a fake agent sandbox.
+- This follow-up is a **separate unmerged candidate** stacked on PR #6; it does not authorise merging either preceding PR, baseline promotion or public release. Live independent agent isolation remains **BLOCKED**.
+
 ## Not established by this package
 
 - Fully automatic native-agent dispatch: **UNVERIFIED**.

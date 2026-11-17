@@ -53,12 +53,21 @@ def _inside(path, folder):
     return path == folder or folder in path.parents
 
 
-def _write_signed(path, record, key):
+def _write_signed(path, record, key, *, create_only=False):
     path = Path(path)
+    data = json.dumps(signing.attach(record, key), indent=2, sort_keys=True) + '\n'
+    if create_only:
+        # Exclusive create prevents overwriting a symlink or a pre-existing
+        # trusted file if another process races the exists() check.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
+        fd = os.open(path, flags, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            handle.write(data)
+        os.chmod(path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        return
     if path.exists():
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-    path.write_text(json.dumps(signing.attach(record, key), indent=2, sort_keys=True) + '\n',
-                    encoding='utf-8')
+    path.write_text(data, encoding='utf-8')
     os.chmod(path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
 
@@ -108,14 +117,29 @@ def run_trial(*, trial_id, working_copy, evidence_dir, signing_key_path, critics
     (the exact file under review) and task_id (specialist_critic only)."""
     working = Path(working_copy).resolve()
     evidence_dir = Path(evidence_dir).resolve()
+    if not isinstance(trial_id, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}', trial_id):
+        raise ValueError('Trial ID must be a safe filename component (letters, digits, _ or -)')
     if _inside(evidence_dir, working):
         raise ValueError('Evidence folder must be outside the working copy')
     key = signing.load_private_key(signing_key_path, not_inside=[working, evidence_dir])
     missing = [leak for leak in RESIDUAL_LEAK_PATHS if not residual_leak_paths.get(leak)]
     if missing:
         raise ValueError('Residual leak paths not documented: ' + ', '.join(missing))
+    if not isinstance(critics, list) or not critics:
+        raise ValueError('Trial requires at least one critic')
+    for spec in critics:
+        role = spec.get('role') if isinstance(spec, dict) else None
+        if not isinstance(role, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', role):
+            raise ValueError('Critic role must be a safe filename component')
+        forbidden = Path(spec['forbidden_path'])
+        if (not forbidden.is_file() or forbidden.is_symlink()
+                or _inside(forbidden, working) or _inside(forbidden, evidence_dir)
+                or forbidden.resolve() == Path(signing_key_path).resolve()):
+            raise ValueError('Canary notes must be an existing regular file outside working, evidence and keys')
     evidence_dir.mkdir(parents=True, exist_ok=True)
     record_path = evidence_dir / f'{trial_id}.json'
+    if record_path.resolve().parent != evidence_dir:
+        raise ValueError('Evidence record filename escapes the evidence folder')
     if record_path.exists():
         raise FileExistsError('Evidence record for this trial already exists')
 
@@ -169,7 +193,10 @@ def run_trial(*, trial_id, working_copy, evidence_dir, signing_key_path, critics
                     bar_now = None
                 review['quality_bar_unchanged_during_review'] = bar_now == review['quality_bar_sha256']
         output_path = evidence_dir / f'{trial_id}_{index}_{spec["role"]}_output.txt'
-        output_path.write_text(output, encoding='utf-8')
+        if output_path.resolve().parent != evidence_dir:
+            raise ValueError('Critic output filename escapes the evidence folder')
+        with output_path.open('x', encoding='utf-8') as handle:
+            handle.write(output)
         os.chmod(output_path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
         entries.append({
@@ -195,7 +222,7 @@ def run_trial(*, trial_id, working_copy, evidence_dir, signing_key_path, critics
     record = {'trial_id': trial_id, 'produced_by': 'critic_harness', 'created': _now(),
               'working_copy': str(working), 'critics': entries,
               'residual_leak_paths': residual_leak_paths}
-    _write_signed(record_path, record, key)
+    _write_signed(record_path, record, key, create_only=True)
     return record_path
 
 

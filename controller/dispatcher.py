@@ -42,7 +42,8 @@ from datetime import datetime, timedelta, timezone
 
 import signing
 from control_record import STAGES, default_control_dir, sha256_file
-from gates import AUTHOR_STAGES, authorize, check_boundary, check_signer, load_trust, note_launch
+from gates import (AUTHOR_STAGES, authorize, check_boundary, check_signer, load_trust,
+                   note_launch, note_launch_failure)
 
 SUBAGENT_TOOLS = ('Task', 'Agent')
 NAMED_STAGES = tuple(s for s in STAGES if s != 'subagent_launch')
@@ -68,7 +69,18 @@ def run_stage(working_copy, stage, command, *, trust_config, control=None, launc
         return {'status': 'BLOCKED', 'stage': stage, 'launched': False, 'reason': str(exc)}
     note_launch(working, control, stage, task_id)
     argv = [*launcher, *command]
-    proc = subprocess.run(argv, cwd=working, timeout=timeout)
+    try:
+        proc = subprocess.run(argv, cwd=working, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        failure = note_launch_failure(working, control, stage, task_id, reason=str(exc))
+        return {'status': 'BLOCKED', 'stage': stage, 'task_id': task_id, 'launched': False,
+                'reason': f'Stage launch failed: {exc}', 'attempt_recorded': failure}
+    if proc.returncode != 0:
+        failure = note_launch_failure(working, control, stage, task_id,
+                                      returncode=proc.returncode, reason='nonzero stage exit')
+        return {'status': 'BLOCKED', 'stage': stage, 'task_id': task_id, 'launched': True,
+                'returncode': proc.returncode, 'reason': 'Stage execution failed (nonzero exit)',
+                'attempt_recorded': failure}
     return {'status': 'LAUNCHED', 'stage': stage, 'task_id': task_id, 'launched': True,
             'argv': argv, 'returncode': proc.returncode}
 
