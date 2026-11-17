@@ -55,6 +55,11 @@ class QuickInstallTests(unittest.TestCase):
         self.assertFalse((self.working / '.env').exists())
         self.assertFalse((self.working / 'id_rsa').exists())
         self.assertTrue((self.working / 'UAT_PROJECT_BRIEF_DRAFT.md').is_file())
+        host_guide = (self.working / 'UAT_START_WITH_AI_HOST.md').read_text()
+        self.assertIn('Before launching any agent', host_guide)
+        self.assertIn(str(INSTALLER.parent / 'controller' / 'start.py'), host_guide)
+        self.assertLess(host_guide.index('Before launching any agent'),
+                        host_guide.index('launch a dedicated native Architect'))
         self.assertTrue((self.control / 'UAT_CONTROL_RECORD.json').is_file())
         self.assertEqual((self.project / 'README.md').read_text(), 'Art Vault test project')
         self.assertFalse((self.project / 'UAT_START_WITH_AI_HOST.md').exists())

@@ -35,7 +35,7 @@ For a more focused first task, add `--goal "Improve the artwork card display"` t
 
 ## 4. Give your AI Host one bounded instruction
 
-First, **review and finish `UAT_PROJECT_BRIEF_DRAFT.md` together**. Approve the exact completed draft using the owner-controlled approval procedure in `controller/START_HERE.md`. Do not treat the presence of the draft, or a hash alone, as identity-authenticated consent.
+First, **review and finish `UAT_PROJECT_BRIEF_DRAFT.md` together**. Approve the exact completed draft using the owner-controlled approval procedure in `controller/START_HERE.md`. On this quick route, run `python3 controller/start.py` from the downloaded UAT repository rather than the older `Universal_AI_Team/start.py` example used after manual embedding. Do not treat the presence of the draft, or a hash alone, as identity-authenticated consent.
 
 Only once the brief is approved, tell your AI Host:
 
