@@ -22,6 +22,10 @@ Copy this repository's `controller/` folder into a new or existing project and r
 
 ## Enforced mode (owner gates, pinned keys, dispatcher, trusted harness)
 
+### Optional bounded Gauntlet review
+
+The controller stops after three failed submissions at most. Its review candidate also stops after two consecutive `FAIL` reviews with no newly passing Specialist Quality Bar gate, or twice-rejected identical Architect plan and bar; it escalates to the owner. It does not treat a failed-to-launch agent as a genuine critic verdict. When comparing versions, `controller/blind_compare.py` can prepare a reviewer-only A/B packet with approved references and keep the randomized mapping private until a human records a score; commands and limitations are in `critics/README.md`. This does not authorize promotion or release.
+
 Needs `pip install cryptography`. Full step-by-step setup and the first genuine trial are in `docs/TRIAL_RUNBOOK.md`. In short:
 
 1. **Two key pairs, created on the trusted side only:** an owner key (always passphrase-protected) for approvals, and a separate harness key for critic verdicts and evidence.

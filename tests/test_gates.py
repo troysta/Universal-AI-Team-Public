@@ -311,6 +311,16 @@ class EvidenceBoundVerdictTests(GateBase):
 
 
 class ArchitectLoopTests(GateBase):
+    def test_two_identical_rejected_architect_rounds_stop_early(self):
+        for attempt in (1, 2):
+            self.submit_plan('No change to the plan\n')
+            outcome = self.review('architect_critic', self.work / PLAN_NAME, 'FAIL')
+            self.assertEqual(bool(outcome['stalled_reason']), attempt == 2)
+        self.assertBlocked(self.launch('architect'), 'stalled')
+        record = json.loads((self.control / RECORD_NAME).read_text())
+        self.assertEqual(record['tasks']['__architect__']['state'], 'STALLED_OWNER_REVIEW')
+        self.assertEqual(record['tasks']['__architect__']['submissions'], 2)
+
     def test_architect_three_failed_reviews_stop_and_escalate(self):
         for attempt in range(1, 4):
             self.submit_plan(f'Team v{attempt}\n')
@@ -334,6 +344,19 @@ class ArchitectLoopTests(GateBase):
 
 
 class GateEnforcementTests(GateBase):
+    def test_two_failed_specialist_rounds_without_new_passes_stop_early(self):
+        self.approved_plan(tasks=('build',))
+        for attempt in (1, 2):
+            self.assertEqual(self.launch('specialist', 'build')['status'], 'LAUNCHED')
+            self.assertEqual(self.launch('specialist_critic', 'build')['status'], 'LAUNCHED')
+            outcome = self.review('specialist_critic', self.candidate, 'FAIL', 'build')
+            self.assertEqual(bool(outcome['stalled_reason']), attempt == 2)
+        self.assertBlocked(self.launch('specialist', 'build'), 'stalled')
+        record = json.loads((self.control / RECORD_NAME).read_text())
+        self.assertEqual(record['tasks']['build']['state'], 'STALLED_OWNER_REVIEW')
+        self.assertEqual(record['tasks']['build']['submissions'], 2)
+        self.assertEqual(len(record['verdicts'][-2:]), 2)
+
     def test_specialist_blocked_until_reviewed_plan_is_owner_approved(self):
         self.submit_plan()
         self.assertBlocked(self.launch('specialist', 'build'), 'not approved the reviewed team plan')
@@ -432,7 +455,10 @@ class GateEnforcementTests(GateBase):
             self.assertEqual(self.launch('specialist', 'build')['status'], 'LAUNCHED')
             self.assertBlocked(self.launch('specialist', 'build'), 'not been reviewed')
             self.assertEqual(self.launch('specialist_critic', 'build')['status'], 'LAUNCHED')
-            result = self.review('specialist_critic', self.candidate, 'FAIL', 'build')
+            # Gate G2 improves between attempts 1 and 2, so the early-stall
+            # rule does not hide the independent three-attempt ceiling.
+            verdict = 'FAIL_TWO' if attempt == 1 else 'FAIL'
+            result = self.review('specialist_critic', self.candidate, verdict, 'build')
             self.assertEqual(result['escalated_to_owner'], attempt == 3)
         self.assertBlocked(self.launch('specialist', 'build'), 'escalate to owner')
 

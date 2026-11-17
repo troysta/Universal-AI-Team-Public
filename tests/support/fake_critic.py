@@ -16,7 +16,7 @@ except OSError as exc:
 print('Reviewed prompt of', len(prompt), 'chars')
 if verdict != 'NONE':
     gates = {f'G{i}': {'verdict': 'PASS' if verdict in ('PASS', 'GATELESS', 'BADGATE', 'EVIDENCELESS')
-                       or i != 1 else 'FAIL',
+                       or (i != 1 and (verdict != 'FAIL_TWO' or i != 2)) else 'FAIL',
                        'evidence': f'TEST-ONLY simulated gate {i} result'} for i in range(1, 6)}
     if verdict == 'BADGATE':
         gates['G1']['verdict'] = 'FAIL'
@@ -24,4 +24,5 @@ if verdict != 'NONE':
         gates['G2']['evidence'] = ''
     if verdict != 'GATELESS':
         print('GATE_RESULTS:', json.dumps(gates))
-    print('VERDICT:', 'PASS' if verdict in ('GATELESS', 'BADGATE', 'EVIDENCELESS') else verdict)
+    print('VERDICT:', 'PASS' if verdict in ('GATELESS', 'BADGATE', 'EVIDENCELESS')
+          else 'FAIL' if verdict == 'FAIL_TWO' else verdict)

@@ -20,6 +20,24 @@ The harness captures the actual critic text in signed evidence. These are critic
 
 These are requirements. This repository does not implement or prove the full critic execution system.
 
+## Bounded Gauntlet rounds and optional human comparison (review candidate)
+
+The maximum is **three author submissions per Architect plan or Specialist task**, never five. After two consecutive signed `FAIL` critic reviews, the trusted controller may stop early for owner assessment:
+
+- **Specialist:** the second failed review did not turn any additional Quality Bar gate into `PASS`, compared with the previous failed review. A new passing gate means measurable progress and permits the third attempt, subject to other gates.
+- **Architect:** both rejected plans have identical plan **and** Quality Bar hashes (there is no Architect gate-by-gate score).
+- `BLOCKED` evidence is not a successful review and never provides evidence of improvement. The three-submission cap, checkpoint requirements and separate owner promotion/release approvals still apply.
+
+Use the optional label-blind reviewer packet when an owner wants to compare an earlier version against a revised artifact:
+
+```bash
+python3 controller/blind_compare.py prepare --working-copy /path/to/project_uat_working --before /path/to/project_uat_working/first.html --after /path/to/project_uat_working/revised.html --task build --packet-dir /private_operator/review_packet_01 --private-dir /private_operator/mapping_01
+python3 controller/blind_compare.py score --packet-dir /private_operator/review_packet_01 --private-dir /private_operator/mapping_01 --choice A --passed-a G1,G2 --passed-b G1 --reason "A meets the navigation and contrast gates" --reviewer "Human reviewer 1"
+python3 controller/blind_compare.py reveal --packet-dir /private_operator/review_packet_01 --private-dir /private_operator/mapping_01
+```
+
+Send the human **only the review packet** (`A.*`, `B.*`, `QUALITY_BAR.json`, approved `REFERENCES/`, and instructions), never the private mapping. The operator must keep the private directory inaccessible to reviewers; chmod alone cannot isolate processes that share an OS account. The reviewer chooses A/B/TIE and scores each gate **before** the operator reveals which is newer. Original artifacts are not changed, scoring is one-shot, and packet hashes are checked. A/B comparison is **optional**, and its result is not an owner approval, critic verdict, or proof of human independence. Content of either artifact or its reference sources could disclose its age; check it before distributing.
+
 ## Critic isolation reporting
 
 Isolation is reported **per trial**. Evidence from one trial does not carry over to another.
