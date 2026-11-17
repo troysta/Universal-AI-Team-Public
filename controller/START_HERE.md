@@ -12,7 +12,7 @@ Copy this repository's `controller/` folder into a new or existing project and r
 
    Approval state is read only from the control folder. `UAT_PERSONAL_HANDOFF.json` in the working copy is an informational copy, so editing it approves nothing.
 
-6. Only then ask the AI Host to follow `UAT_START_WITH_AI_HOST.md` and start the supervised Architect review. The Architect's proposed team requires **another, separate** owner approval before Specialists launch.
+6. Only then ask the AI Host to follow `UAT_START_WITH_AI_HOST.md` and start the supervised Architect review. The Architect prepares both `UAT_TEAM_PLAN.md` and a task-by-task `UAT_QUALITY_BAR.json` in the working copy. Each task must have five testable gates and SHA-256-bound local reference sources (see `examples/art_vault_quality_bar.example.json`). The Architect Critic reviews both. The owner then approves the **exact plan and Quality Bar together** before Specialists launch.
 
 7. Before each stage starts, re-check the approved brief:
 
@@ -32,7 +32,7 @@ Needs `pip install cryptography`. Full step-by-step setup and the first genuine 
 
 2. **Pin both public keys** in a host-controlled trust config outside every working copy (see `examples/trust_config.example.json`). The dispatcher rejects any key file whose fingerprint doesn't match.
 
-3. **Owner approvals need an explicit action.** Gates: `brief`, `team_plan` (with `--tasks`), `promotion` and `release` (with `--candidate`; any file type, including ZIP archives).
+3. **Owner approvals need an explicit action.** Gates: `brief`, `team_plan` (with `--tasks`; hashes both the reviewed plan and mandatory Quality Bar), `promotion` and `release` (with `--candidate`; any file type, including ZIP archives).
 
    - On this machine, at a terminal (passphrase, then the first 8 characters of the exact SHA-256):
      `python3 Universal_AI_Team/owner.py approve team_plan --working-copy … --signing-key ~/.uat/owner.pem --trust-config ~/.uat/trust.json --tasks build,docs`
@@ -42,7 +42,7 @@ Needs `pip install cryptography`. Full step-by-step setup and the first genuine 
 
    `python3 Universal_AI_Team/dispatcher.py run --working-copy … --trust-config ~/.uat/trust.json --stage specialist --task build --launcher '["sudo","-u","uat-agent"]' -- <stage command>`
 
-5. **Critic verdicts come only from evidence.** `critic_harness.py verdict <evidence.json> --critic 0 …` records a verdict only if that critic's isolation evidence assesses as `EVIDENCED`; the verdict is the critic's own `VERDICT:` line, bound to the exact artifact hash it reviewed. Three failed reviews stop the Architect's plan loop or a Specialist's task and escalate to the owner.
+5. **Critic verdicts come only from evidence.** `critic_harness.py verdict <evidence.json> --critic 0 …` records a verdict only if that critic's isolation evidence assesses as `EVIDENCED`; the verdict is the critic's own `VERDICT:` line, bound to the exact artifact hash it reviewed. For a Specialist Critic the output must also include `GATE_RESULTS:` with pass/fail evidence for all five approved gates. If the bar or its referenced source changed, if a gate lacks evidence, or if gate results contradict PASS, the verdict cannot be recorded. Three failed reviews stop the Architect's plan loop or a Specialist's task and escalate to the owner.
 
 6. **If the host launches sub-agents itself,** issue a launch ticket on the trusted side for each one, then install the dispatcher as a pre-launch hook:
 

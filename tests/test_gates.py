@@ -4,6 +4,7 @@ and the boundary check.
 The agent boundary here is tests/support/fake_sandbox.py, a TEST-ONLY stand-in.
 """
 import base64
+import hashlib
 import io
 import json
 import os
@@ -23,6 +24,7 @@ from gates import CONTROLLER_DIR, PLAN_NAME, load_trust, record_verdict
 from owner import (approve_as_owner, approve_brief_as_owner, request, sign_request, submit,
                    terminal_confirm)
 from project_discovery import create_draft
+from quality_bar import QUALITY_BAR_NAME
 
 SUPPORT = Path(__file__).resolve().parent / 'support'
 PASSPHRASE = b'correct horse battery staple'
@@ -119,13 +121,26 @@ class GateBase(unittest.TestCase):
                                 trust_config=self.config, passphrase=PASSPHRASE,
                                 confirm=YES, **kwargs)
 
-    def submit_plan(self, text='Team: builder, writer\n'):
+    def write_quality_bar(self, tasks=('build',)):
+        reference = self.work / 'UAT_APPROVED_PROJECT_BRIEF.md'
+        bar = {'schema_version': 1, 'tasks': {task: {
+            'goal': 'Produce reviewed artifact', 'audience': 'Artists',
+            'references': [{'path': reference.name,
+                            'sha256': hashlib.sha256(reference.read_bytes()).hexdigest()}],
+            'gates': [{'id': f'G{i}', 'requirement': f'Test condition {i}',
+                       'pass_condition': f'Condition {i} holds', 'test_method': 'test-only assertion',
+                       'evidence_required': f'Output for condition {i}'} for i in range(1, 6)]
+        } for task in tasks}}
+        (self.work / QUALITY_BAR_NAME).write_text(json.dumps(bar, indent=2))
+
+    def submit_plan(self, text='Team: builder, writer\n', tasks=('build',)):
         self.assertEqual(self.launch('architect')['status'], 'LAUNCHED')
         (self.work / PLAN_NAME).write_text(text)
+        self.write_quality_bar(tasks)
         self.assertEqual(self.launch('architect_critic')['status'], 'LAUNCHED')
 
     def approved_plan(self, tasks=('build', 'docs')):
-        self.submit_plan()
+        self.submit_plan(tasks=tasks)
         self.review('architect_critic', self.work / PLAN_NAME)
         self.approve('team_plan', tasks=list(tasks))
 
@@ -186,7 +201,7 @@ class OwnerActionTests(GateBase):
         with self.assertRaisesRegex(ValueError, 'did not confirm'):
             approve_as_owner(self.work, 'team_plan', signing_key=self.owner_private,
                              trust_config=self.config, passphrase=PASSPHRASE,
-                             confirm=lambda s, sha: False, tasks=['a'])
+                             confirm=lambda s, sha: False, tasks=['build'])
 
     def test_terminal_confirmation_refuses_non_interactive_input(self):
         with self.assertRaisesRegex(ValueError, 'interactive terminal'):
@@ -218,7 +233,7 @@ class OfflineApprovalTests(GateBase):
         self.review('architect_critic', self.work / PLAN_NAME)
         signed = self.sign(request(self.work, 'team_plan', trust_config=self.config, tasks=['build']))
         edited = json.loads(json.dumps(signed))
-        edited['payload']['tasks'].append('deploy')
+        edited['signature']['value'] = 'AAAA'
         with self.assertRaisesRegex(ValueError, 'not signed by the pinned owner key'):
             submit(self.work, edited, trust_config=self.config)
         (self.work / PLAN_NAME).write_text('Team: changed\n')
@@ -277,6 +292,22 @@ class EvidenceBoundVerdictTests(GateBase):
         with self.assertRaisesRegex(ValueError, 'changed since the critic reviewed'):
             record_verdict(self.work, evidence, 0, private_key=self.harness_key, trust=self.trust())
 
+    def test_quality_bar_changed_during_or_after_architect_review_blocks_verdict(self):
+        evidence = self.critic_trial('architect_critic', self.work / PLAN_NAME)
+        bar_path = self.work / QUALITY_BAR_NAME
+        data = json.loads(bar_path.read_text())
+        data['tasks']['build']['gates'][0]['pass_condition'] = 'changed'
+        bar_path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'exact Quality Bar'):
+            record_verdict(self.work, evidence, 0, private_key=self.harness_key, trust=self.trust())
+
+    def test_critic_packet_includes_artifact_and_quality_bar(self):
+        evidence = self.critic_trial('architect_critic', self.work / PLAN_NAME)
+        entry = json.loads(evidence.read_text())['critics'][0]
+        self.assertIn(str(self.work / PLAN_NAME), entry['launch_prompt'])
+        self.assertIn(str(self.work / QUALITY_BAR_NAME), entry['launch_prompt'])
+        self.assertTrue(entry['review']['quality_bar_unchanged_during_review'])
+
 
 class ArchitectLoopTests(GateBase):
     def test_architect_three_failed_reviews_stop_and_escalate(self):
@@ -293,6 +324,7 @@ class ArchitectLoopTests(GateBase):
 
     def test_architect_critic_needs_a_submission(self):
         (self.work / PLAN_NAME).write_text('Plan written outside the dispatcher\n')
+        self.write_quality_bar()
         self.assertBlocked(self.launch('architect_critic'), 'awaiting review')
 
     def test_architect_loop_closes_after_plan_approval(self):
@@ -314,6 +346,79 @@ class GateEnforcementTests(GateBase):
         self.approved_plan()
         (self.work / PLAN_NAME).write_text('Team: plus a deployer\n')
         self.assertBlocked(self.launch('specialist', 'build'), 'changed since the owner approved')
+
+    def test_quality_bar_edited_after_approval_blocks_every_later_stage(self):
+        self.approved_plan(tasks=('build',))
+        bar_path = self.work / QUALITY_BAR_NAME
+        data = json.loads(bar_path.read_text())
+        data['tasks']['build']['gates'][0]['pass_condition'] = 'Lowered after approval'
+        bar_path.write_text(json.dumps(data))
+        self.assertBlocked(self.launch('specialist', 'build'), 'Quality Bar changed')
+        self.assertBlocked(self.launch('final_critic'), 'Quality Bar changed')
+
+    def test_source_change_after_approval_blocks_even_when_bar_itself_is_unchanged(self):
+        self.approved_plan(tasks=('build',))
+        (self.work / 'UAT_APPROVED_PROJECT_BRIEF.md').write_text('tampered spec')
+        self.assertBlocked(self.launch('specialist', 'build'), 'Approved brief check failed')
+
+    def test_other_quality_bar_source_change_blocks(self):
+        self.submit_plan()
+        reference = self.work / 'reference.md'
+        reference.write_text('Approved accessibility checklist')
+        bar_path = self.work / QUALITY_BAR_NAME
+        data = json.loads(bar_path.read_text())
+        data['tasks']['build']['references'].append(
+            {'path': reference.name, 'sha256': hashlib.sha256(reference.read_bytes()).hexdigest()})
+        bar_path.write_text(json.dumps(data))
+        # The reviewed bar is now the one with the added reference.
+        self.review('architect_critic', self.work / PLAN_NAME)
+        self.approve('team_plan', tasks=['build'])
+        reference.write_text('Modified source after owner approval')
+        self.assertBlocked(self.launch('specialist', 'build'), 'source changed')
+
+    def test_protected_quality_bar_copy_tamper_blocks(self):
+        self.approved_plan(tasks=('build',))
+        protected = next(self.control.glob('approved_quality_bar_*.json'))
+        os.chmod(protected, 0o644)
+        protected.write_text('{}')
+        self.assertBlocked(self.launch('specialist', 'build'), 'Protected Quality Bar copy')
+
+    def test_missing_and_malformed_quality_bars_block_architect_critic(self):
+        self.assertEqual(self.launch('architect')['status'], 'LAUNCHED')
+        (self.work / PLAN_NAME).write_text('Team: build\n')
+        self.assertBlocked(self.launch('architect_critic'), 'Missing mandatory Quality Bar')
+        self.write_quality_bar()
+        data = json.loads((self.work / QUALITY_BAR_NAME).read_text())
+        data['tasks']['build']['gates'].pop()
+        (self.work / QUALITY_BAR_NAME).write_text(json.dumps(data))
+        self.assertBlocked(self.launch('architect_critic'), 'exactly 5 pass/fail')
+
+    def test_quality_bar_cannot_reference_outside_or_missing_source(self):
+        self.assertEqual(self.launch('architect')['status'], 'LAUNCHED')
+        (self.work / PLAN_NAME).write_text('Team: build\n')
+        self.write_quality_bar()
+        path = self.work / QUALITY_BAR_NAME
+        data = json.loads(path.read_text())
+        data['tasks']['build']['references'][0]['path'] = '../author_private/notes.md'
+        path.write_text(json.dumps(data))
+        self.assertBlocked(self.launch('architect_critic'), 'unsafe reference')
+
+    def test_missing_per_gate_critic_evidence_never_counts_as_pass(self):
+        self.approved_plan(tasks=('build',))
+        self.assertEqual(self.launch('specialist', 'build')['status'], 'LAUNCHED')
+        self.assertEqual(self.launch('specialist_critic', 'build')['status'], 'LAUNCHED')
+        for bad in ('GATELESS', 'BADGATE', 'EVIDENCELESS'):
+            evidence = self.critic_trial('specialist_critic', self.candidate, bad, 'build')
+            with self.assertRaisesRegex(ValueError, 'gate results missing|contradicts|supporting evidence'):
+                record_verdict(self.work, evidence, 0, private_key=self.harness_key, trust=self.trust())
+        self.assertBlocked(self.launch('specialist', 'build'), 'not been reviewed')
+        self.assertEqual(self.review('specialist_critic', self.candidate, 'PASS', 'build')['verdict'], 'PASS')
+
+    def test_final_critic_cannot_record_verdict_before_specialists_pass(self):
+        self.approved_plan(tasks=('build',))
+        evidence = self.critic_trial('final_critic', self.candidate)
+        with self.assertRaisesRegex(ValueError, 'before task reviews'):
+            record_verdict(self.work, evidence, 0, private_key=self.harness_key, trust=self.trust())
 
     def test_unapproved_task_and_missing_task_block(self):
         self.approved_plan()
@@ -429,6 +534,62 @@ class TicketHookTests(GateBase):
         code, message = self.call(prompt)
         self.assertEqual(code, 2)
         self.assertIn('current, unreviewed submission', message)
+
+
+class SyntheticArtVaultQualityBarTests(GateBase):
+    def test_five_real_checks_fail_then_pass_with_signed_gate_evidence(self):
+        # Illustrative artifact and source packet only: no user artwork is touched.
+        source = self.work / 'framing_reference.json'
+        source.write_text(json.dumps({'original_sha256': hashlib.sha256(b'artwork pixels').hexdigest()}))
+        self.submit_plan('One isolated framing task; no live artwork\n', tasks=('framing',))
+        bar_path = self.work / QUALITY_BAR_NAME
+        bar = json.loads(bar_path.read_text())
+        bar['tasks']['framing']['references'].append(
+            {'path': source.name, 'sha256': hashlib.sha256(source.read_bytes()).hexdigest()})
+        names = [
+            ('Preserve the original image', 'Original hash identical', 'Compare SHA-256', 'Hash comparison'),
+            ('Default mat 17px', 'mat_px == 17', 'Read JSON dimensions', 'Mat value'),
+            ('Default frame 10px', 'frame_px == 10', 'Read JSON dimensions', 'Frame value'),
+            ('Gallery displays framed copy', 'gallery_image == framed_copy', 'Inspect export', 'Gallery field'),
+            ('Promotions displays framed copy', 'promotion_image == framed_copy', 'Inspect export', 'Promotion field'),
+        ]
+        bar['tasks']['framing']['gates'] = [
+            {'id': f'G{i}', 'requirement': name, 'pass_condition': condition,
+             'test_method': method, 'evidence_required': evidence}
+            for i, (name, condition, method, evidence) in enumerate(names, 1)]
+        bar_path.write_text(json.dumps(bar, indent=2))
+        self.review('architect_critic', self.work / PLAN_NAME)
+        self.approve('team_plan', tasks=['framing'])
+        artifact = self.work / 'synthetic_framing.json'
+        data = {'original_sha256': json.loads(source.read_text())['original_sha256'],
+                'mat_px': 18, 'frame_px': 10,
+                'gallery_image': 'framed_copy', 'promotion_image': 'framed_copy'}
+        for attempt, expected in ((1, 'FAIL'), (2, 'PASS')):
+            self.assertEqual(self.launch('specialist', 'framing')['status'], 'LAUNCHED')
+            self.assertEqual(self.launch('specialist_critic', 'framing')['status'], 'LAUNCHED')
+            if attempt == 2:
+                data['mat_px'] = 17  # focused revision for the failed G2
+            artifact.write_text(json.dumps(data))
+            spec = {'role': 'specialist_critic', 'model': 'synthetic-test-only',
+                    'stage': 'specialist_critic', 'task_id': 'framing', 'artifact': str(artifact),
+                    'launcher': self.critic_sandbox,
+                    'command': [sys.executable, str(SUPPORT / 'synthetic_art_vault_critic.py'),
+                                str(artifact), str(bar_path), str(source)],
+                    'prompt': 'Compare the standalone framing data against five approved gates.',
+                    'forbidden_path': str(self.notes), 'python': sys.executable,
+                    'permissions': ['read review packet'], 'readable_paths': [str(self.work)],
+                    'writable_paths': [str(self.root / 'critic_out')]}
+            evidence = run_trial(trial_id=f'FRAMING-{attempt}', working_copy=self.work,
+                                 evidence_dir=self.trusted / 'evidence', signing_key_path=self.harness_private,
+                                 critics=[spec], residual_leak_paths={k: 'synthetic' for k in RESIDUAL_LEAK_PATHS})
+            record_inspection(evidence, self.harness_private, 0, 'PASS', 'Test-only inspector')
+            result = record_verdict(self.work, evidence, 0, private_key=self.harness_key, trust=self.trust())
+            self.assertEqual(result['verdict'], expected)
+            signed_record = json.loads((self.control / RECORD_NAME).read_text())
+            gate_results = signed_record['verdicts'][-1]['payload']['gate_results']
+            self.assertEqual(len(gate_results), 5)
+            self.assertEqual(gate_results['G2']['verdict'], 'FAIL' if attempt == 1 else 'PASS')
+        self.assertEqual(self.launch('final_critic')['status'], 'LAUNCHED')
 
 
 if __name__ == '__main__':

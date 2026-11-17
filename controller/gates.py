@@ -44,6 +44,7 @@ from pathlib import Path
 import signing
 from control_record import (STAGES, default_control_dir, load_record, save_record, sha256_file,
                             verify_brief, write_protected)
+from quality_bar import QUALITY_BAR_NAME, load_quality_bar, validate_gate_results
 
 MAX_SUBMISSIONS = 3
 OWNER_GATES = ('team_plan', 'promotion', 'release')
@@ -223,6 +224,12 @@ def authorize(stage, working_copy, trust, control=None, *, task_id=None, candida
             raise ValueError('Owner has not approved the reviewed team plan')
         if not plan.is_file() or sha256_file(plan) != approval['subject_sha256']:
             raise ValueError('Team plan changed since the owner approved it')
+        _, bar_sha = load_quality_bar(working, expected_tasks=approval['tasks'])
+        if bar_sha != approval.get('quality_bar_sha256'):
+            raise ValueError('Quality Bar changed since owner approval')
+        protected = control / f'approved_quality_bar_{bar_sha[:12]}.json'
+        if not protected.is_file() or sha256_file(protected) != bar_sha:
+            raise ValueError('Protected Quality Bar copy missing or changed')
         return approval
 
     def need_task(approval):
@@ -261,6 +268,7 @@ def authorize(stage, working_copy, trust, control=None, *, task_id=None, candida
     if stage == 'architect_critic':
         if not plan.is_file():
             raise ValueError('No team plan to review')
+        load_quality_bar(working)
         review_loop()
     if stage == 'specialist':
         need_task(need_plan_approval())
@@ -321,13 +329,16 @@ def prepare_approval(working_copy, gate, trust, control=None, *, tasks=None, can
         if not subject.is_file():
             raise ValueError('No team plan file to approve')
         sha = sha256_file(subject)
-        if not any(v['stage'] == 'architect_critic' and v['verdict'] == 'PASS'
-                   and v['artifact_sha256'] == sha for v in verdicts):
-            raise ValueError('Team plan has no accepted independent critic review for this version')
         tasks = [t.strip() for t in (tasks or []) if t.strip()]
         if not tasks or len(set(tasks)) != len(tasks) or ARCHITECT_LOOP in tasks:
             raise ValueError('List the approved task ids (unique, non-empty)')
+        _, bar_sha = load_quality_bar(working, expected_tasks=tasks)
+        if not any(v['stage'] == 'architect_critic' and v['verdict'] == 'PASS'
+                   and v['artifact_sha256'] == sha and v.get('quality_bar_sha256') == bar_sha
+                   for v in verdicts):
+            raise ValueError('Team plan and Quality Bar have no accepted independent critic review for this version')
         extra['tasks'] = tasks
+        extra['quality_bar_sha256'] = bar_sha
     else:
         if not candidate or not Path(candidate).is_file():
             raise ValueError(f'{gate} needs the exact candidate file')
@@ -356,6 +367,10 @@ def store_approval(working_copy, gate, payload, signature, trust, control=None, 
     record.setdefault('approvals', {})[gate] = {'payload': payload, 'signature': signature}
     sha = payload['subject_sha256']
     write_protected(control / f'approved_{gate}_{sha[:12]}{subject.suffix}', subject.read_bytes())
+    if gate == 'team_plan':
+        bar_path = working / QUALITY_BAR_NAME
+        write_protected(control / f'approved_quality_bar_{payload["quality_bar_sha256"][:12]}.json',
+                        bar_path.read_bytes())
     save_record(control, record, 'OWNER_GATE_APPROVED', gate=gate, sha256=sha)
     return {'status': 'APPROVED', 'gate': gate, 'sha256': sha, 'tasks': payload.get('tasks'),
             'identity_verification': 'OWNER_KEY_HOLDER_NOT_PERSONAL_IDENTITY'}
@@ -410,18 +425,46 @@ def record_verdict(working_copy, evidence_path, critic_index, *, private_key, tr
         raise ValueError('Artifact changed since the critic reviewed it')
     verdict = entry.get('critic_verdict') if entry.get('critic_verdict') in ('PASS', 'FAIL') else 'BLOCKED'
     submission = None
-    if stage in REVIEW_STAGES:
+    if stage in VERDICT_STAGES:
         if stage == 'specialist_critic' and (not approvals.get('team_plan')
                                              or task_id not in approvals['team_plan']['tasks']):
             raise ValueError('Verdict task is not in the owner-approved team plan')
         if stage == 'architect_critic' and review['artifact'] != str(working / PLAN_NAME):
             raise ValueError('Architect critic must review the team plan file')
-        status = _loop_status(record, verdicts, stage, task_id)
-        if status['launched'] <= status['reviewed']:
-            raise ValueError('No submission is awaiting a verdict')
-        submission = status['reviewed'] + 1
+        if stage == 'architect_critic':
+            _, bar_sha = load_quality_bar(working)
+            if review.get('quality_bar_sha256') != bar_sha or not review.get('quality_bar_unchanged_during_review'):
+                raise ValueError('Architect critic did not review this exact Quality Bar')
+        if stage == 'specialist_critic':
+            approval = approvals['team_plan']
+            bar, bar_sha = load_quality_bar(working, expected_tasks=approval['tasks'])
+            if (review.get('quality_bar_sha256') != bar_sha
+                    or bar_sha != approval.get('quality_bar_sha256')
+                    or not review.get('quality_bar_unchanged_during_review')):
+                raise ValueError('Specialist critic did not review the approved Quality Bar')
+            validate_gate_results(bar, task_id, entry.get('gate_results'), verdict)
+        if stage == 'final_critic':
+            approval = approvals.get('team_plan')
+            if not approval:
+                raise ValueError('Final Critic requires owner-approved team plan')
+            bar, bar_sha = load_quality_bar(working, expected_tasks=approval['tasks'])
+            if (bar_sha != approval.get('quality_bar_sha256')
+                    or review.get('quality_bar_sha256') != bar_sha
+                    or not review.get('quality_bar_unchanged_during_review')):
+                raise ValueError('Final Critic did not review the approved Quality Bar')
+            unaccepted = [t for t in approval['tasks']
+                          if not _loop_status(record, verdicts, 'specialist', t)['accepted']]
+            if unaccepted:
+                raise ValueError('Final Critic cannot pass before task reviews: ' + ', '.join(unaccepted))
+        if stage in REVIEW_STAGES:
+            status = _loop_status(record, verdicts, stage, task_id)
+            if status['launched'] <= status['reviewed']:
+                raise ValueError('No submission is awaiting a verdict')
+            submission = status['reviewed'] + 1
     payload = _payload('CRITIC_VERDICT', working, stage=stage, task_id=task_id,
                        artifact_sha256=review['artifact_sha256'], verdict=verdict,
+                       quality_bar_sha256=review.get('quality_bar_sha256'),
+                       gate_results=entry.get('gate_results') if stage == 'specialist_critic' else None,
                        submission=submission, trial_id=evidence.get('trial_id'),
                        evidence_sha256=evidence_sha, critic_index=critic_index)
     entry_out = {'payload': payload, 'signature': signing.attach(payload, private_key)['signature']}

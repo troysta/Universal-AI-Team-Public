@@ -48,15 +48,15 @@ python3 controller/dispatcher.py run --working-copy /work/proj_uat_working \
 Use the offline owner route (`owner.py request` / `sign` on a separate device / `submit`) for every approval in this trial, so the owner key is never on this machine.
 
 1. Approve the brief (`owner.py request brief …`, sign offline, `owner.py submit …`).
-2. Dispatcher `run --stage architect` (or `ticket` + hook) → Architect writes `UAT_TEAM_PLAN.md`.
-3. Dispatcher `run --stage architect_critic`. Critic trial for the plan: copy `examples/trial_config.example.json`, set `stage: architect_critic`, `artifact: …/UAT_TEAM_PLAN.md`, the critic launcher and the author's private notes as `forbidden_path`, then
+2. Dispatcher `run --stage architect` (or `ticket` + hook) → Architect writes `UAT_TEAM_PLAN.md` **and** `UAT_QUALITY_BAR.json` in the working copy. Each approved task needs exactly five measurable gates with `requirement`, `pass_condition`, `test_method` and `evidence_required`, plus hashed local references and a goal and audience. Copy `examples/art_vault_quality_bar.example.json` as an illustrative starting point; replace its placeholder SHA-256 with the hash of the real approved brief, and adapt the task IDs. The controller rejects missing gates, changed source hashes and source paths outside the working copy.
+3. Dispatcher `run --stage architect_critic`. The Architect Critic must review **both** the team plan and its proposed Quality Bar against the brief. Critic trial: copy `examples/trial_config.example.json`, set `stage: architect_critic`, `artifact: …/UAT_TEAM_PLAN.md`, the critic launcher and the author's private notes as `forbidden_path`, then
    `critic_harness.py run trial.json --signing-key /trusted/uat/harness.pem`.
 4. Read the logged launch prompt in the evidence record, then `critic_harness.py inspect … --result PASS|FAIL --by "<name>"`.
 5. `critic_evidence.py <record> --working-copy … --public-key /trusted/uat/harness.pub` → `EVIDENCED` or `BLOCKED`.
 6. `critic_harness.py verdict <record> --critic 0 …`. It refuses unless step 5 is `EVIDENCED`, and uses the critic's own `VERDICT:` line.
-7. Owner approves the reviewed plan with `--tasks …` (offline route).
-8. For each task: `specialist` launch, `specialist_critic` launch, then steps 3–6 with `stage: specialist_critic`, `task_id` and the task's artifact.
-9. `final_critic` on the candidate (steps 3–6 with `stage: final_critic`), then `promotion_proposal`. Promotion and release each need their own owner approval and are outside this trial.
+7. Owner approves the reviewed plan **and exact Quality Bar together** with `--tasks …` (offline route). Task IDs must match the Quality Bar. The signed approval binds the SHA-256 of both files, and a protected copy of the bar is stored outside the working copy. Every later stage rechecks both hashes and the referenced source files.
+8. For each task: `specialist` launch, `specialist_critic` launch, then steps 3–6 with `stage: specialist_critic`, `task_id` and the task's artifact. Harness prompt includes the exact artifact and Quality Bar paths. The critic's output must end with a `GATE_RESULTS:` JSON object containing an outcome and evidence for **every** required gate, followed by `VERDICT: PASS` or `VERDICT: FAIL`. Missing evidence or contradictory global verdict blocks recording; a proper `FAIL` counts against the three-submission maximum.
+9. `final_critic` on the candidate (steps 3–6 with `stage: final_critic`), then `promotion_proposal`. The Final Critic receives the same approved Quality Bar; a final verdict cannot be recorded until each approved task has an accepted review. Promotion and release each need their own owner approval and are outside this trial.
 10. **Bypass checks:** try a hook launch with no ticket, with an edited prompt, and with an expired ticket; each must be blocked. Try one launch with the boundary loosened; it must be blocked.
 
 ## 5. Report
@@ -69,3 +69,14 @@ Record in `docs/STATUS.md`, with the evidence record paths:
 - Any stage the dispatcher blocked and why.
 
 If any requirement is missing or failed, the trial is `BLOCKED`.
+
+### Critic output example (for a five-gate task)
+
+The real critic must cite actual observations or test evidence, not the example text below:
+
+```text
+GATE_RESULTS: {"G1":{"verdict":"PASS","evidence":"<actual original-file hashes>"},"G2":{"verdict":"PASS","evidence":"<actual mat measurement>"},"G3":{"verdict":"PASS","evidence":"<actual frame measurement>"},"G4":{"verdict":"PASS","evidence":"<actual Gallery inspection>"},"G5":{"verdict":"PASS","evidence":"<actual Promotions inspection>"}}
+VERDICT: PASS
+```
+
+The harness signs the critic's reported evidence. A signature proves the record wasn't altered after signing; it **does not** independently prove the critic's measurements are true. An outside reviewer still needs to inspect the actual sources and results.

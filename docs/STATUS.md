@@ -28,6 +28,15 @@ Source: selected project-discovery starter files from the protected baseline of 
 - Offline owner approvals (`owner.py request` / `sign` / `submit`) keep the owner key off the agents' machine.
 - 80 of 80 Python tests pass locally, including bypass attempts. The agent boundary in tests is a test-only fake sandbox.
 
+## Separate Quality Bar branch — awaiting review (18 November 2026)
+
+- Phase 1 adds the mandatory, task-specific `UAT_QUALITY_BAR.json` with **five measurable gates per task**, a goal/audience, reference-file hashes, pass conditions, test methods and evidence requirements.
+- Architect Critic evidence binds the exact proposed team plan **and** Quality Bar. Owner's `team_plan` signature binds both hashes; the control folder stores an approved copy and stages recheck file and reference-source integrity.
+- Specialist Critic evidence must include `GATE_RESULTS:` with a verdict and supporting evidence for every approved gate. Incomplete or contradictory gate results cannot count as a pass. Final Critic receives the bar and cannot record a review before specialist tasks have accepted reviews.
+- **91 of 91 Python tests pass locally**, including negative tests for changed/missing gates, changed references, missing evidence and a two-round **synthetic** Art Vault framing example (failed mat measurement, focused correction, then pass). The example is deterministic test code, **not a genuine native AI critic or a Samsung device test**.
+- These changes are **proposed on a separate development branch**, not merged into `main` or promoted as a protected baseline. Phase 2 (no-improvement stop) and Phase 3 (optional blind human comparison) remain proposals, not implemented.
+- Live host-native agents and independently examined isolation evidence are still **BLOCKED / not established**. The prior 80-test baseline and its limitations remain historically true; the 91-test result refers only to this unmerged candidate.
+
 ## Not established by this package
 
 - Fully automatic native-agent dispatch: **UNVERIFIED**.
