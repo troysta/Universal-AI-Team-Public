@@ -1,0 +1,9 @@
+{
+  "owner_public_key": "/trusted/uat/owner.pub",
+  "owner_fingerprint": "<fingerprint_to_pin printed by signing.py --role owner>",
+  "harness_public_key": "/trusted/uat/harness.pub",
+  "harness_fingerprint": "<fingerprint_to_pin printed by signing.py --role harness>",
+  "private_key_paths": ["/trusted/uat/owner.pem", "/trusted/uat/harness.pem"],
+  "evidence_dirs": ["/trusted/uat/evidence"],
+  "protected_paths": ["/path/to/host/hook/settings.json"]
+}

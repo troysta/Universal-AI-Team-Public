@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from control_record import init_record
 from project_discovery import inspect, create_draft, approve_brief
 
 
@@ -14,6 +15,7 @@ class ProjectDiscoveryTests(unittest.TestCase):
         self.root = Path(tmp.name)
         self.work = self.root / 'working'
         self.work.mkdir()
+        init_record(self.root / 'working_control', self.work, {'state': 'AWAITING_ARCHITECT'})
         (self.work / 'UAT_PERSONAL_HANDOFF.json').write_text(json.dumps({'state': 'AWAITING_ARCHITECT'}))
         (self.work / 'UAT_START_WITH_AI_HOST.md').write_text('AI Host prepares Architect.\n')
 

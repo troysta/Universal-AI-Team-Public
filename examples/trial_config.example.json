@@ -1,0 +1,26 @@
+{
+  "trial_id": "T-001",
+  "working_copy": "/work/myproject_uat_working",
+  "evidence_dir": "/trusted/uat/evidence",
+  "critics": [{
+    "role": "specialist_critic",
+    "stage": "specialist_critic",
+    "task_id": "build",
+    "artifact": "/work/myproject_uat_working/src.zip",
+    "model": "<model name>",
+    "launcher": ["sudo", "-u", "uat-critic", "--"],
+    "command": ["<headless critic command that reads the prompt on stdin>"],
+    "prompt": "Review /work/myproject_uat_working/src against the approved brief only. End with VERDICT: PASS or VERDICT: FAIL and the evidence.",
+    "forbidden_path": "/work/author_private/build_notes.md",
+    "permissions": ["read working copy"],
+    "readable_paths": ["/work/myproject_uat_working"],
+    "writable_paths": ["/work/critic_out"]
+  }],
+  "residual_leak_paths": {
+    "git_history": "working copy has no .git (excluded by starter)",
+    "shared_temp_and_env": "critic runs with a clean environment and its own TMPDIR",
+    "host_launch_wording": "launch prompt inspected by owner before inspect PASS",
+    "network_access": "<state whether critic has network access>",
+    "earlier_verdicts_in_files": "verdicts stored only in control folder"
+  }
+}

@@ -10,12 +10,16 @@ import shutil
 from fnmatch import fnmatchcase
 from pathlib import Path
 
+from control_record import check_separate, default_control_dir, init_record
+
 
 IGNORED_NAMES = {'Universal_AI_Team', '.git', '.env', '.venv', 'node_modules', '__pycache__',
                  'credentials', 'secrets', '.ssh', '.aws', '.npmrc',
                  'protected_baselines', 'internal_trials', 'private_handoffs',
-                 'private', 'backups'}
-IGNORED_PATTERNS = ('.env.*', '*.pem', '*.key', '*.p12', '*.pfx')
+                 'private', 'backups', '.git-credentials', '.netrc', '.pypirc'}
+IGNORED_PATTERNS = ('.env.*', '*.pem', '*.key', '*.p12', '*.pfx',
+                    'id_rsa*', 'id_dsa*', 'id_ecdsa*', 'id_ed25519*',
+                    '*.sqlite', '*.sqlite3')
 NORMALIZED_IGNORED_NAMES = {name.casefold() for name in IGNORED_NAMES}
 
 
@@ -46,21 +50,26 @@ def file_hashes(project, files):
             for name in files}
 
 
-def prepare(project, output, goal, *, create=False):
+def prepare(project, output, goal, *, create=False, control=None):
     source = Path(project).resolve()
     target = Path(output).resolve()
+    control = Path(control).resolve() if control else default_control_dir(target)
     if not source.is_dir() or not isinstance(goal, str) or not goal.strip():
         raise ValueError('Existing project folder and a nonempty goal required')
     if source == Path(source.anchor) or source == Path.home():
         raise ValueError('Choose a specific project folder, not a broad filesystem root')
     if source == target or source in target.parents or target in source.parents:
         raise ValueError('Trial working copy must be separate from project source')
+    check_separate(control, source, target)
     if target.exists():
         raise FileExistsError('Output already exists: refusing overwrite')
+    if control.exists():
+        raise FileExistsError('Control folder already exists: refusing overwrite')
     files = project_files(source)
     source_hashes = file_hashes(source, files)
     result = {'status': 'PREVIEW_ONLY', 'project': str(source),
-              'working_copy': str(target), 'included_file_count': len(files),
+              'working_copy': str(target), 'control_record_folder': str(control),
+              'included_file_count': len(files),
               'excluded_names': sorted(IGNORED_NAMES),
               'excluded_patterns': sorted(IGNORED_PATTERNS),
               'native_agents_launched': False, 'owner_approval': 'NOT_REQUESTED'}
@@ -80,8 +89,11 @@ def prepare(project, output, goal, *, create=False):
         'promotion_owner_approval': 'REQUIRED', 'release_owner_approval': 'REQUIRED',
         'filesystem_isolation': 'NOT_ENFORCED', 'technical_tool_restrictions': 'NOT_VERIFIED',
     }
+    init_record(control, target, handoff)
+    # Informational mirror for the AI Host. Approval is never read from here.
+    mirror = {**handoff, 'authoritative': False, 'control_record_folder': str(control)}
     metadata = target / 'UAT_PERSONAL_HANDOFF.json'
-    metadata.write_text(json.dumps(handoff, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    metadata.write_text(json.dumps(mirror, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     guide = target / 'UAT_START_WITH_AI_HOST.md'
     guide.write_text(
         '# Universal AI Team — personal supervised handoff\n\n'
@@ -95,12 +107,17 @@ def prepare(project, output, goal, *, create=False):
         '4. After approval, work only on this disposable copy, with separate specialist critics, '
         'max three submissions each and verified reviewed checkpoints between specialists.\n'
         '5. Final independent critic reviews all accepted artifacts. '
+        'Before each stage starts, run start.py --verify-brief --working-copy <this folder> '
+        '--stage <stage>; if it reports BLOCKED, stop and tell the Project Owner. '
+        'UAT_PERSONAL_HANDOFF.json here is an informational copy only; the authoritative '
+        'record is in the separate control folder, which agents must not modify. '
         'Do not promote or release without separate owner approvals.\n\n'
         '**Security truth:** This shared host has no verified per-agent filesystem isolation, '
         'cryptographic owner authentication or automatic native dispatch. Keep supervised.\n',
         encoding='utf-8')
     return {**result, 'status': 'WORKING_COPY_PREPARED',
-            'handoff': str(metadata), 'start_here': str(guide)}
+            'handoff': str(metadata), 'start_here': str(guide),
+            'control_record': str(control / 'UAT_CONTROL_RECORD.json')}
 
 
 def main(argv=None):
@@ -109,9 +126,11 @@ def main(argv=None):
     parser.add_argument('--output', required=True)
     parser.add_argument('--goal', required=True)
     parser.add_argument('--create', action='store_true', help='Explicitly create a new working copy')
+    parser.add_argument('--control', help='Control record folder (default: sibling <output>_control)')
     args = parser.parse_args(argv)
     try:
-        result = prepare(args.project, args.output, args.goal, create=args.create)
+        result = prepare(args.project, args.output, args.goal, create=args.create,
+                         control=args.control)
         print(json.dumps(result, indent=2, sort_keys=True))
     except (ValueError, FileExistsError, OSError, RuntimeError) as exc:
         print(json.dumps({'status': 'BLOCKED', 'reason': str(exc)}, indent=2))

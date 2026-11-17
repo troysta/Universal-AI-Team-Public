@@ -9,15 +9,39 @@ Source: selected project-discovery starter files from the protected baseline of 
 - Source contains an activation/project-discovery starter and a synthetic notes example.
 - Original baseline ZIP was not edited.
 
+## Added after publication (pending owner review)
+
+- Approval state and approved-brief copy moved to a control folder outside the working copy; the working-copy handoff is informational only.
+- `--verify-brief --stage <stage>` re-checks the approved brief before each stage and logs the result.
+- Found briefs are fenced as untrusted text; briefs over 12,000 characters add an owner placeholder that blocks approval until reviewed.
+- Wider secrets filter (`id_rsa*`, `id_ed25519*`, `.git-credentials`, `.netrc`, `.pypirc`, `*.sqlite`).
+- Trusted critic harness (`critic_harness.py`): plants the canary, runs the forbidden-file read through the critic's own launcher, launches the critic, and writes a harness-signed evidence record; `critic_evidence.py` rejects unsigned, edited or non-harness records and reports `EVIDENCED` or `BLOCKED`.
+- Stage dispatcher (`dispatcher.py`): `run` for trusted-side launches; `hook` for host sub-agent launches.
+- Owner gates enforced by the dispatcher (`gates.py`): signed brief; owner approval of the critic-reviewed team plan before any Specialist; tasks limited to the approved plan; review required between submissions; three signed `FAIL` verdicts stop the task and escalate to the owner; Final Critic `PASS` for the exact candidate before a promotion proposal; separate owner approvals of the exact candidate for promotion and then release.
+- Separate keys: passphrase-protected owner key for approvals, harness key for critic verdicts and evidence; both public keys pinned by fingerprint in a host-controlled trust config. Each signer is checked against its pinned role.
+- Explicit owner action: approvals need the passphrase and typing the first 8 characters of the exact SHA-256 at an interactive terminal.
+- Boundary probe: before every launch the dispatcher checks, through the agents' own launcher, that private keys are unreadable and the control folder, trust config, public keys, evidence folders and dispatcher code are unwritable. Otherwise `BLOCKED`.
+- Pre-launch hook requires a harness-signed launch ticket bound to the exact prompt, stage, task, submission and candidate; the agent cannot choose or relabel the stage.
+- Critic verdicts are recorded only from `EVIDENCED`, harness-signed isolation evidence; the verdict is the critic's own output line, bound to the reviewed artifact hash; evidence is single-use.
+- Three-failure stop applies to the Architect's plan loop as well as each Specialist task.
+- Candidates and approved subjects are handled as bytes, so ZIP archives and other binary deliverables work.
+- Offline owner approvals (`owner.py request` / `sign` / `submit`) keep the owner key off the agents' machine.
+- 80 of 80 Python tests pass locally, including bypass attempts. The agent boundary in tests is a test-only fake sandbox.
+
 ## Not established by this package
 
 - Fully automatic native-agent dispatch: **UNVERIFIED**.
 - Enforced per-agent filesystem or tool isolation: **BLOCKED / not implemented**.
 - Cryptographically authenticated owner approval: **UNVERIFIED**; local approval records are not identity proof.
+- Agent boundary (separate OS user or container): **not provided by this package**; setup is in `docs/TRIAL_RUNBOOK.md`. The dispatcher refuses to launch without it, but only the owner can build it.
+- Genuine end-to-end native-agent isolation trial: **not yet run**. Overall isolation status: **BLOCKED** until a trial produces evidence.
+- Dispatcher as the only launch path: **depends on the host**. If the host can start agents without the dispatcher or hook, the gates can be bypassed.
+- Hook mode cannot record that a ticket was used, so the identical ticketed prompt could be launched again before it expires (default 30 minutes). It cannot be relabelled or reused for another stage, task or submission.
+- Owner identity: a signature proves possession of the owner key and passphrase and a deliberate approval of the exact content, not which person acted. With the offline route the key is off the agents' machine; a hardware security key would bind it to a physical device.
 - Independent critic contexts and final review in the historical example: **reported in promotion record**, not independently rerun by these unit tests.
 - Real-project production readiness: **NOT CLAIMED**.
 
-Next priority: an evidenced end-to-end host-native run with blind critics, controlled tool access, three-submission stop, regression checks and distinct owner approval gates.
+Next priority: the first genuine end-to-end trial in `docs/TRIAL_RUNBOOK.md`, then rerun all regression tests. Promotion of a new protected baseline requires a separate owner approval.
 
 ## Publication boundary
 
