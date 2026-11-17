@@ -26,4 +26,8 @@ PYTHONPATH=controller python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 These tests do not prove authenticated owner identity, enforced agent isolation, or automatic native-agent dispatch. See `docs/STATUS.md`.
 
-Public release needs a separate explicit owner decision. Review all files and existing repository contents before any commit.
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the issues labelled **good first issue**. Pull requests are reviewed by the repository owner.
+
+This experimental repository was explicitly approved for public GitHub collaboration on 17 November 2026. Production release, private-record disclosure, and protected-baseline promotion require separate owner decisions.
